@@ -457,6 +457,18 @@ static void computeSmoothingShapes(tinyobj::attrib_t &inattrib,
 
 }  // namespace
 
+void WriteBufferTest(const std::string& filename, const std::vector<float>& buffer) {
+  std::ofstream fh{filename};
+  if (!fh) {
+    std::cerr << "Failed to open " << filename << "\n";
+    exit(1);
+  }
+  for(size_t i{0}; i < buffer.size(); ++i) {
+    fh << buffer[i] << "\n";
+  }
+  fh.close();
+}
+
 static bool LoadObjAndConvert(float bmin[3], float bmax[3],
                               std::vector<DrawObject>* drawObjects,
                               std::vector<tinyobj::material_t>& materials,
@@ -581,6 +593,13 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
   std::vector<tinyobj::shape_t>& shapes = regen_all_normals ? outshapes : inshapes;
   tinyobj::attrib_t& attrib = regen_all_normals ? outattrib : inattrib;
 
+  std::ofstream fh{"vertices-ogviewer.txt"};
+  if (!fh) {
+    std::cerr << "Failed to open " << "\n";
+    exit(1);
+  }
+
+  // Loop over shapes
   {
     for (size_t s = 0; s < shapes.size(); s++) {
       DrawObject o;
@@ -593,7 +612,9 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
         computeSmoothingNormals(attrib, shapes[s], smoothVertexNormals);
       }
 
-      for (size_t f = 0; f < shapes[s].mesh.indices.size() / 3; f++) {
+      // Loop over faces(polygon)
+      // for (size_t f = 0; f < shapes[s].mesh.indices.size() / 3; f++) {
+      for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
         tinyobj::index_t idx0 = shapes[s].mesh.indices[3 * f + 0];
         tinyobj::index_t idx1 = shapes[s].mesh.indices[3 * f + 1];
         tinyobj::index_t idx2 = shapes[s].mesh.indices[3 * f + 2];
@@ -603,9 +624,8 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
         if ((current_material_id < 0) ||
             (current_material_id >= static_cast<int>(materials.size()))) {
           // Invaid material ID. Use default material.
-          current_material_id =
-              materials.size() -
-              1;  // Default material is added to the last item in `materials`.
+          // Default material is added to the last item in `materials`.
+          current_material_id = materials.size() - 1;
         }
         // if (current_material_id >= materials.size()) {
         //    std::cerr << "Invalid material index: " << current_material_id <<
@@ -671,6 +691,10 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
           bmax[k] = std::max(v[1][k], bmax[k]);
           bmax[k] = std::max(v[2][k], bmax[k]);
         }
+        fh << v[0][0] << " " << v[0][1] << " " << v[0][2] << "\n";
+        fh << v[1][0] << " " << v[1][1] << " " << v[1][2] << "\n";
+        fh << v[2][0] << " " << v[2][1] << " " << v[2][2] << "\n";
+
 
         float n[3][3];
         {
@@ -692,12 +716,16 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
                 n[1][k] = attrib.normals[3 * nf1 + k];
                 n[2][k] = attrib.normals[3 * nf2 + k];
               }
+              // fh << n[0][0] << " " << n[0][1] << " " << n[0][2] << "\n";
+              // fh << n[1][0] << " " << n[1][1] << " " << n[1][2] << "\n";
+              // fh << n[2][0] << " " << n[2][1] << " " << n[2][2] << "\n";
             }
           } else {
             invalid_normal_index = true;
           }
 
           if (invalid_normal_index && !smoothVertexNormals.empty()) {
+            std::cout << "using smoothing normals\n";
             // Use smoothing normals
             int f0 = idx0.vertex_index;
             int f1 = idx1.vertex_index;
@@ -740,7 +768,8 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
           buffer.push_back(n[k][1]);
           buffer.push_back(n[k][2]);
           // Combine normal and diffuse to get color.
-          float normal_factor = 0.2;
+          // float normal_factor = 0.2;
+          float normal_factor = 1.0;
           float diffuse_factor = 1 - normal_factor;
           float c[3] = {n[k][0] * normal_factor + diffuse[0] * diffuse_factor,
                         n[k][1] * normal_factor + diffuse[1] * diffuse_factor,
@@ -762,6 +791,7 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
         }
       }
 
+      fh.close();
       o.vb_id = 0;
       o.numTriangles = 0;
 
@@ -775,6 +805,7 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
       }
       printf("shape[%d] material_id %d\n", int(s), int(o.material_id));
 
+      WriteBufferTest("buffer-ogviewer.txt", buffer);
       if (buffer.size() > 0) {
         glGenBuffers(1, &o.vb_id);
         glBindBuffer(GL_ARRAY_BUFFER, o.vb_id);
@@ -919,6 +950,7 @@ static void Draw(const std::vector<DrawObject>& drawObjects,
 
   glEnable(GL_POLYGON_OFFSET_FILL);
   glPolygonOffset(1.0, 1.0);
+  // vertex (3 floats) + normal (3 floats) + color (3 floats) + texcoord (2 floats)
   GLsizei stride = (3 + 3 + 3 + 2) * sizeof(float);
   for (size_t i = 0; i < drawObjects.size(); i++) {
     DrawObject o = drawObjects[i];

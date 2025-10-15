@@ -1,12 +1,12 @@
 
 # Makefile for macOS using MacPorts
 
-CFLAGS += -std=c++17 -Wno-register -Wno-deprecated-declarations -I /opt/local/include
+CFLAGS += -std=c++17 -Wno-register -Wno-deprecated-declarations -I /opt/local/include -I ./glm
 LDFLAGS += -L /opt/local/lib -lglfw -lGLEW -framework OpenGL
 default viewer: viewer.o trackball.o
 	clang++ $(CFLAGS) trackball.o viewer.o $(LDFLAGS) -o viewer
 
-ogviewer: og-viewer.cc trackball.o
+ogviewer: og-viewer.o trackball.o
 	clang++ $(CFLAGS) trackball.o og-viewer.o $(LDFLAGS) -o ogviewer
 
 trackball.o: trackball.cc
