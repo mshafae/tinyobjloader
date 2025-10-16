@@ -1,22 +1,35 @@
 
 # Makefile for macOS using MacPorts
 
-CFLAGS += -std=c++17 -Wno-register -Wno-deprecated-declarations -I /opt/local/include -I ./glm
-LDFLAGS += -L /opt/local/lib -lglfw -lGLEW -framework OpenGL
-default viewer: viewer.o trackball.o
-	clang++ $(CFLAGS) trackball.o viewer.o $(LDFLAGS) -o viewer
+CXXFILES = viewer.cc og-viewer.cc trackball.cc
+HEADERS = stb_image.h trackball.h
+CXX = clang++
+CXXFLAGS += -x c++ -g -O3 -Wall -pedantic -pipe -std=c++20 -Wno-register -Wno-deprecated-declarations -Wno-unused-but-set-variable -I /opt/local/include -I ./glm
+LDFLAGS += -g -O3 -Wall -pedantic -pipe -std=c++20 -L /opt/local/lib -lglfw -lGLEW -framework OpenGL
+
+OBJECTS = $(CXXFILES:.cc=.o)
+
+DEP = $(CXXFILES:.cc=.d)
+
+all: viewer ogviewer
+
+viewer: viewer.o trackball.o
+	$(CXX) $(LDFLAGS) -o viewer trackball.o viewer.o
 
 ogviewer: og-viewer.o trackball.o
-	clang++ $(CFLAGS) trackball.o og-viewer.o $(LDFLAGS) -o ogviewer
+	$(CXX) $(LDFLAGS) -o ogviewer trackball.o og-viewer.o
 
-trackball.o: trackball.cc
-	clang++ $(CFLAGS) -c $<
+%.o: %.cc
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -MMD -MP
 
-viewer.o: viewer.cc
-	clang++ $(CFLAGS) -c $<
+# trackball.o: trackball.cc
+# 	$(CXX) $(CXXFLAGS) -c $<
 
-og-viewer.o: og-viewer.cc
-	clang++ $(CFLAGS) -c $<
+# viewer.o: viewer.cc
+# 	$(CXX) $(CXXFLAGS) -c $<
+
+# og-viewer.o: og-viewer.cc
+# 	$(CXX) $(CXXFLAGS) -c $<
 
 
 clean:

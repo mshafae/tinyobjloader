@@ -593,6 +593,12 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
   std::vector<tinyobj::shape_t>& shapes = regen_all_normals ? outshapes : inshapes;
   tinyobj::attrib_t& attrib = regen_all_normals ? outattrib : inattrib;
 
+  printf("# of vertices  = %d\n", (int)(attrib.vertices.size()) / 3);
+  printf("# of normals   = %d\n", (int)(attrib.normals.size()) / 3);
+  printf("# of texcoords = %d\n", (int)(attrib.texcoords.size()) / 2);
+  printf("# of materials = %d\n", (int)materials.size());
+  printf("# of shapes    = %d\n", (int)shapes.size());
+
   std::ofstream fh{"vertices-ogviewer.txt"};
   if (!fh) {
     std::cerr << "Failed to open " << "\n";
@@ -615,9 +621,9 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
       // Loop over faces(polygon)
       // for (size_t f = 0; f < shapes[s].mesh.indices.size() / 3; f++) {
       for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
-        tinyobj::index_t idx0 = shapes[s].mesh.indices[3 * f + 0];
-        tinyobj::index_t idx1 = shapes[s].mesh.indices[3 * f + 1];
-        tinyobj::index_t idx2 = shapes[s].mesh.indices[3 * f + 2];
+        tinyobj::index_t idx0 = shapes.at(s).mesh.indices.at(3 * f + 0);
+        tinyobj::index_t idx1 = shapes.at(s).mesh.indices.at(3 * f + 1);
+        tinyobj::index_t idx2 = shapes.at(s).mesh.indices.at(3 * f + 2);
 
         int current_material_id = shapes[s].mesh.material_ids[f];
 
@@ -655,13 +661,31 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
             assert(attrib.texcoords.size() >
                    size_t(2 * idx2.texcoord_index + 1));
 
+            if(idx0.texcoord_index == 8334) {
+              std::cout << "idx0 " << 2 * idx0.texcoord_index + 1 << "\n";
+              std::cout << attrib.texcoords.size() << "\n";
+              exit(1);
+            }
+            if(idx1.texcoord_index == 8334) {
+              std::cout << "idx1 " << 2 * idx0.texcoord_index + 1 << "\n";
+              std::cout << attrib.texcoords.size() << "\n";
+              exit(1);
+
+            }
+            if(idx2.texcoord_index == 8334) {
+              std::cout << "idx2 " << 2 * idx0.texcoord_index + 1 << "\n";
+              std::cout << attrib.texcoords.size() << "\n";
+              exit(1);
+
+            }
+
             // Flip Y coord.
-            tc[0][0] = attrib.texcoords[2 * idx0.texcoord_index];
-            tc[0][1] = 1.0f - attrib.texcoords[2 * idx0.texcoord_index + 1];
-            tc[1][0] = attrib.texcoords[2 * idx1.texcoord_index];
-            tc[1][1] = 1.0f - attrib.texcoords[2 * idx1.texcoord_index + 1];
-            tc[2][0] = attrib.texcoords[2 * idx2.texcoord_index];
-            tc[2][1] = 1.0f - attrib.texcoords[2 * idx2.texcoord_index + 1];
+            tc[0][0] = attrib.texcoords.at(2 * idx0.texcoord_index);
+            tc[0][1] = 1.0f - attrib.texcoords.at(2 * idx0.texcoord_index + 1);
+            tc[1][0] = attrib.texcoords.at(2 * idx1.texcoord_index);
+            tc[1][1] = 1.0f - attrib.texcoords.at(2 * idx1.texcoord_index + 1);
+            tc[2][0] = attrib.texcoords.at(2 * idx2.texcoord_index);
+            tc[2][1] = 1.0f - attrib.texcoords.at(2 * idx2.texcoord_index + 1);
           }
         } else {
           tc[0][0] = 0.0f;
@@ -681,9 +705,9 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
           assert(f1 >= 0);
           assert(f2 >= 0);
 
-          v[0][k] = attrib.vertices[3 * f0 + k];
-          v[1][k] = attrib.vertices[3 * f1 + k];
-          v[2][k] = attrib.vertices[3 * f2 + k];
+          v[0][k] = attrib.vertices.at(3 * f0 + k);
+          v[1][k] = attrib.vertices.at(3 * f1 + k);
+          v[2][k] = attrib.vertices.at(3 * f2 + k);
           bmin[k] = std::min(v[0][k], bmin[k]);
           bmin[k] = std::min(v[1][k], bmin[k]);
           bmin[k] = std::min(v[2][k], bmin[k]);
@@ -712,9 +736,9 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
                 assert(size_t(3 * nf0 + k) < attrib.normals.size());
                 assert(size_t(3 * nf1 + k) < attrib.normals.size());
                 assert(size_t(3 * nf2 + k) < attrib.normals.size());
-                n[0][k] = attrib.normals[3 * nf0 + k];
-                n[1][k] = attrib.normals[3 * nf1 + k];
-                n[2][k] = attrib.normals[3 * nf2 + k];
+                n[0][k] = attrib.normals.at(3 * nf0 + k);
+                n[1][k] = attrib.normals.at(3 * nf1 + k);
+                n[2][k] = attrib.normals.at(3 * nf2 + k);
               }
               // fh << n[0][0] << " " << n[0][1] << " " << n[0][2] << "\n";
               // fh << n[1][0] << " " << n[1][1] << " " << n[1][2] << "\n";
