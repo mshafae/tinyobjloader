@@ -22,16 +22,11 @@ ogviewer: og-viewer.o trackball.o
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -MMD -MP
 
-# trackball.o: trackball.cc
-# 	$(CXX) $(CXXFLAGS) -c $<
-
-# viewer.o: viewer.cc
-# 	$(CXX) $(CXXFLAGS) -c $<
-
-# og-viewer.o: og-viewer.cc
-# 	$(CXX) $(CXXFLAGS) -c $<
-
-
 clean:
-	-rm trackball.o viewer.o og-viewer.o
+	-rm $(OBJECTS)
+	-rm $(DEP)
+
+spotless: clean
 	-rm viewer ogviewer
+
+-include $(DEP)
