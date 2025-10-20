@@ -9,9 +9,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <iomanip>
 #include <limits>
 #include <map>
 #include <string>
+#include <sstream>
 #include <unordered_map>
 #include <vector>
 
@@ -594,8 +596,10 @@ void WriteBufferTest(const std::string& filename, const std::vector<tinyobj::rea
     std::cerr << "Failed to open " << filename << "\n";
     exit(1);
   }
-  for(size_t i{0}; i < buffer.size(); ++i) {
-    fh << buffer[i] << "\n";
+  fh << std::fixed << std::setprecision(3);
+  int i{0};
+  for (const auto& val : buffer) {
+    fh << i++ << ": " << val << "\n";
   }
   fh.close();
 }
@@ -692,12 +696,7 @@ bool LoadObjAndConvert(
   printf("# of materials = %d\n", (int)materials.size());
   printf("# of shapes    = %d\n", (int)outshapes.size());
 
-  std::ofstream fh{"vertices-viewer.txt"};
-  if (!fh) {
-    std::cerr << "Failed to open " << "\n";
-    exit(1);
-  }
-
+  int buffer_name_count{0};
   // Loop over shapes
   for (size_t s = 0; s < outshapes.size(); s++) {
     DrawObject draw_object;
@@ -731,10 +730,8 @@ bool LoadObjAndConvert(
         tinyobj::real_t vx = outattrib.vertices.at(3 * size_t(idx.vertex_index) + 0);
         tinyobj::real_t vy = outattrib.vertices.at(3 * size_t(idx.vertex_index) + 1);
         tinyobj::real_t vz = outattrib.vertices.at(3 * size_t(idx.vertex_index) + 2);
-        // fh << vx << " " << vy << " " << vz << "\n";
         assert(vx != NAN && vy != NAN && vz != NAN);
         vertices[v] = glm::vec3{vx, vy, vz};
-        fh << vertices[v].x << " " << vertices[v].y << " " << vertices[v].z << "\n";
         bmin.x = glm::min(bmin.x, vx);
         bmin.y = glm::min(bmin.y, vy);
         bmin.z = glm::min(bmin.z, vz);
@@ -752,31 +749,23 @@ bool LoadObjAndConvert(
           tinyobj::real_t nz = outattrib.normals.at(3 * size_t(idx.normal_index) + 2);
           assert(nx != NAN && ny != NAN && nz != NAN);
           normals[v] = glm::vec3{nx, ny, nz};
-          // fh << nx << " " << ny << " " << nz << "\n";
 
         }
 
         // Check if `texcoord_index` is zero or positive. negative = no texcoord
         // data
-        try{
         if (idx.texcoord_index >= 0) {
-          tinyobj::real_t tx =
-              outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 0);
-          tinyobj::real_t ty =
-              outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 1);
+          // tinyobj::real_t tx =
+          //     outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 0);
+          // tinyobj::real_t ty =
+          //     outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 1);
           // Flip Y coordinate
-          // tinyobj::real_t tx = outattrib.texcoords.at(2 * idx.texcoord_index);
-          // tinyobj::real_t ty = 1.0f - outattrib.texcoords.at(2 * idx.texcoord_index + 1);
-
+          tinyobj::real_t tx = outattrib.texcoords.at(2 * idx.texcoord_index);
+          tinyobj::real_t ty = 1.0f - outattrib.texcoords.at(2 * idx.texcoord_index + 1);
 
           texcoords[v] = glm::vec2{tx, ty};
         }
-        } catch (const std::out_of_range& oor) {
-          std::cerr << "Out of Range error: " << oor.what() << '\n';
-          std::cerr << "idx.texcoord_index = " << idx.texcoord_index << "\n";
-          std::cerr << "attrib.texcoords.size() = " << attrib.texcoords.size() << "\n";
-          exit(1);
-        }
+        
         // Optional: vertex colors
         // tinyobj::real_t red   = outattrib.colors[3*size_t(idx.vertex_index)+0];
         // tinyobj::real_t green = outattrib.colors[3*size_t(idx.vertex_index)+1];
@@ -808,16 +797,27 @@ bool LoadObjAndConvert(
       glm::vec3 colors[3];
 
       for (int k = 0; k < 3; k++) {
-        colors[k] = glm::vec3{normals[k].x * normal_factor + diffuse.r * diffuse_factor,
+        const glm::vec3 color{
+                    normals[k].x * normal_factor + diffuse.r * diffuse_factor,
                     normals[k].y * normal_factor + diffuse.g * diffuse_factor,
                     normals[k].z * normal_factor + diffuse.b * diffuse_factor };
+        const glm::vec3 normalized_color = glm::normalize(color);
+        const glm::vec3 v_color{
+          normalized_color.r * 0.5 + 0.5,
+          normalized_color.g * 0.5 + 0.5,
+          normalized_color.b * 0.5 + 0.5,
+        };
+        colors[k] = v_color;
       }
+
+
 
       // glm::vec3 colors[3] = {
       //   glm::vec3{1.0, 0.0, 0.0},
       //   glm::vec3{1.0, 0.0, 0.0},
       //   glm::vec3{1.0, 0.0, 0.0},
       // };
+
 
       for (int k = 0; k < 3; k++) {
         buffer.push_back(vertices[k].x);
@@ -839,7 +839,6 @@ bool LoadObjAndConvert(
 
     } // end Loop over faces(polygon) 3 at a time
 
-    fh.close();
     draw_object.vb_id = 0;
     draw_object.numTriangles = 0;
     // Use the material ID of the first face
@@ -848,12 +847,11 @@ bool LoadObjAndConvert(
     // printf("shape[%d] material_id %d\n", int(s),
            // int(draw_object.material_id));
 
-    WriteBufferTest("buffer-viewer.txt", buffer);
     if (buffer.size() > 0) {
       glGenBuffers(1, &draw_object.vb_id);
       glBindBuffer(GL_ARRAY_BUFFER, draw_object.vb_id);
       glBufferData(GL_ARRAY_BUFFER, buffer.size() * sizeof(tinyobj::real_t),
-                   &buffer.at(0), GL_STATIC_DRAW);
+                   buffer.data(), GL_STATIC_DRAW);
       draw_object.numTriangles = buffer.size() / (3 + 3 + 3 + 2) /
                                  3;  // 3:vtx, 3:normal, 3:col, 2:texcoord
 
@@ -861,13 +859,15 @@ bool LoadObjAndConvert(
              draw_object.numTriangles);
     }
 
+    std::ostringstream file_name_stream;
+    file_name_stream << "buffer-view-" << buffer_name_count++ << ".txt";
+    WriteBufferTest(file_name_stream.str(), buffer);
+
     drawObjects->push_back(draw_object);
   } // end for every shape
 
-/*
-bmin = -71.892532, 0.000000, -47.928356
-bmax = 82.293999, 79.006561, 47.928356
-*/
+  _materials = materials;
+
   printf("bmin = %f, %f, %f\n", bmin.x, bmin.y, bmin.z);
   printf("bmax = %f, %f, %f\n", bmax.x, bmax.y, bmax.z);
   return true;
@@ -984,8 +984,8 @@ static void motionFunc(GLFWwindow* window, double mouse_x, double mouse_y) {
 }
 
 static void Draw(const std::vector<DrawObject>& drawObjects,
-                 std::vector<tinyobj::material_t>& materials,
-                 std::map<std::string, GLuint>& textures) {
+                 const std::vector<tinyobj::material_t>& materials,
+                 const std::map<std::string, GLuint>& textures) {
   glPolygonMode(GL_FRONT, GL_FILL);
   if (g_cull_face) {
     glPolygonMode(GL_BACK, GL_LINE);
@@ -1009,12 +1009,15 @@ static void Draw(const std::vector<DrawObject>& drawObjects,
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    if ((o.material_id < materials.size())) {
-      std::string diffuse_texname = materials[o.material_id].diffuse_texname;
+
+    // MS: Something is wrong with the materials
+    // if ((o.material_id < materials.size())) {
+      assert(o.material_id < materials.size());
+      std::string diffuse_texname = materials.at(o.material_id).diffuse_texname;
       if (textures.find(diffuse_texname) != textures.end()) {
-        glBindTexture(GL_TEXTURE_2D, textures[diffuse_texname]);
+        glBindTexture(GL_TEXTURE_2D, textures.at(diffuse_texname));
       }
-    }
+    // }
     glVertexPointer(3, GL_FLOAT, stride, (const void*)0);
     glNormalPointer(GL_FLOAT, stride, (const void*)(sizeof(float) * 3));
     glColorPointer(3, GL_FLOAT, stride, (const void*)(sizeof(float) * 6));
@@ -1121,6 +1124,11 @@ int main(int argc, char** argv) {
   if (false == LoadObjAndConvert( bmin, bmax, &gDrawObjects, materials, textures,
                                  argv[1])) {
     return -1;
+  }
+
+  std::cout << "Textures:\n";
+  for (const auto& pair : textures) {
+    std::cout << pair.first << ", " << pair.second << "\n";
   }
 
   // MS: compute bounding box

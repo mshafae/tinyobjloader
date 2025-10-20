@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <iomanip>
 #include <limits>
 #include <map>
 #include <string>
@@ -457,14 +458,16 @@ static void computeSmoothingShapes(tinyobj::attrib_t &inattrib,
 
 }  // namespace
 
-void WriteBufferTest(const std::string& filename, const std::vector<float>& buffer) {
+void WriteBufferTest(const std::string& filename, const std::vector<tinyobj::real_t>& buffer) {
   std::ofstream fh{filename};
   if (!fh) {
     std::cerr << "Failed to open " << filename << "\n";
     exit(1);
   }
-  for(size_t i{0}; i < buffer.size(); ++i) {
-    fh << buffer[i] << "\n";
+  fh << std::fixed << std::setprecision(3);
+  int i{0};
+  for (const auto& val : buffer) {
+    fh << i++ << ": " << val << "\n";
   }
   fh.close();
 }
@@ -599,17 +602,13 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
   printf("# of materials = %d\n", (int)materials.size());
   printf("# of shapes    = %d\n", (int)shapes.size());
 
-  std::ofstream fh{"vertices-ogviewer.txt"};
-  if (!fh) {
-    std::cerr << "Failed to open " << "\n";
-    exit(1);
-  }
 
   // Loop over shapes
   {
+    int buffer_name_count{0};
     for (size_t s = 0; s < shapes.size(); s++) {
-      DrawObject o;
-      std::vector<float> buffer;  // pos(3float), normal(3float), color(3float)
+      DrawObject draw_object;
+      std::vector<tinyobj::real_t> buffer;  // pos(3float), normal(3float), color(3float)
 
       // Check for smoothing group and compute smoothing normals
       std::map<int, vec3> smoothVertexNormals;
@@ -661,23 +660,23 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
             assert(attrib.texcoords.size() >
                    size_t(2 * idx2.texcoord_index + 1));
 
-            if(idx0.texcoord_index == 8334) {
-              std::cout << "idx0 " << 2 * idx0.texcoord_index + 1 << "\n";
-              std::cout << attrib.texcoords.size() << "\n";
-              exit(1);
-            }
-            if(idx1.texcoord_index == 8334) {
-              std::cout << "idx1 " << 2 * idx0.texcoord_index + 1 << "\n";
-              std::cout << attrib.texcoords.size() << "\n";
-              exit(1);
+            // if(idx0.texcoord_index == 8334) {
+            //   std::cout << "idx0 " << 2 * idx0.texcoord_index + 1 << "\n";
+            //   std::cout << attrib.texcoords.size() << "\n";
+            //   exit(1);
+            // }
+            // if(idx1.texcoord_index == 8334) {
+            //   std::cout << "idx1 " << 2 * idx0.texcoord_index + 1 << "\n";
+            //   std::cout << attrib.texcoords.size() << "\n";
+            //   exit(1);
 
-            }
-            if(idx2.texcoord_index == 8334) {
-              std::cout << "idx2 " << 2 * idx0.texcoord_index + 1 << "\n";
-              std::cout << attrib.texcoords.size() << "\n";
-              exit(1);
+            // }
+            // if(idx2.texcoord_index == 8334) {
+            //   std::cout << "idx2 " << 2 * idx0.texcoord_index + 1 << "\n";
+            //   std::cout << attrib.texcoords.size() << "\n";
+            //   exit(1);
 
-            }
+            // }
 
             // Flip Y coord.
             tc[0][0] = attrib.texcoords.at(2 * idx0.texcoord_index);
@@ -715,10 +714,6 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
           bmax[k] = std::max(v[1][k], bmax[k]);
           bmax[k] = std::max(v[2][k], bmax[k]);
         }
-        fh << v[0][0] << " " << v[0][1] << " " << v[0][2] << "\n";
-        fh << v[1][0] << " " << v[1][1] << " " << v[1][2] << "\n";
-        fh << v[2][0] << " " << v[2][1] << " " << v[2][2] << "\n";
-
 
         float n[3][3];
         {
@@ -740,9 +735,6 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
                 n[1][k] = attrib.normals.at(3 * nf1 + k);
                 n[2][k] = attrib.normals.at(3 * nf2 + k);
               }
-              // fh << n[0][0] << " " << n[0][1] << " " << n[0][2] << "\n";
-              // fh << n[1][0] << " " << n[1][1] << " " << n[1][2] << "\n";
-              // fh << n[2][0] << " " << n[2][1] << " " << n[2][2] << "\n";
             }
           } else {
             invalid_normal_index = true;
@@ -792,8 +784,8 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
           buffer.push_back(n[k][1]);
           buffer.push_back(n[k][2]);
           // Combine normal and diffuse to get color.
-          // float normal_factor = 0.2;
-          float normal_factor = 1.0;
+          float normal_factor = 0.2;
+          // float normal_factor = 1.0;
           float diffuse_factor = 1 - normal_factor;
           float c[3] = {n[k][0] * normal_factor + diffuse[0] * diffuse_factor,
                         n[k][1] * normal_factor + diffuse[1] * diffuse_factor,
@@ -815,34 +807,36 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
         }
       }
 
-      fh.close();
-      o.vb_id = 0;
-      o.numTriangles = 0;
+      draw_object.vb_id = 0;
+      draw_object.numTriangles = 0;
 
       // OpenGL viewer does not support texturing with per-face material.
       if (shapes[s].mesh.material_ids.size() > 0 &&
           shapes[s].mesh.material_ids.size() > s) {
-        o.material_id = shapes[s].mesh.material_ids[0];  // use the material ID
+        draw_object.material_id = shapes[s].mesh.material_ids[0];  // use the material ID
                                                          // of the first face.
       } else {
-        o.material_id = materials.size() - 1;  // = ID for default material.
+        draw_object.material_id = materials.size() - 1;  // = ID for default material.
       }
-      printf("shape[%d] material_id %d\n", int(s), int(o.material_id));
+      printf("shape[%d] material_id %d\n", int(s), int(draw_object.material_id));
 
-      WriteBufferTest("buffer-ogviewer.txt", buffer);
       if (buffer.size() > 0) {
-        glGenBuffers(1, &o.vb_id);
-        glBindBuffer(GL_ARRAY_BUFFER, o.vb_id);
+        glGenBuffers(1, &draw_object.vb_id);
+        glBindBuffer(GL_ARRAY_BUFFER, draw_object.vb_id);
         glBufferData(GL_ARRAY_BUFFER, buffer.size() * sizeof(float),
                      &buffer.at(0), GL_STATIC_DRAW);
-        o.numTriangles = buffer.size() / (3 + 3 + 3 + 2) /
+        draw_object.numTriangles = buffer.size() / (3 + 3 + 3 + 2) /
                          3;  // 3:vtx, 3:normal, 3:col, 2:texcoord
 
         printf("shape[%d] # of triangles = %d\n", static_cast<int>(s),
-               o.numTriangles);
+               draw_object.numTriangles);
       }
 
-      drawObjects->push_back(o);
+      std::ostringstream file_name_stream;
+      file_name_stream << "buffer-ogview-" << buffer_name_count++ << ".txt";
+      WriteBufferTest(file_name_stream.str(), buffer);
+
+      drawObjects->push_back(draw_object);
     }
   }
 
@@ -1098,6 +1092,11 @@ int main(int argc, char** argv) {
   if (false == LoadObjAndConvert(bmin, bmax, &gDrawObjects, materials, textures,
                                  argv[1])) {
     return -1;
+  }
+
+  std::cout << "Textures:\n";
+  for (const auto& pair : textures) {
+    std::cout << pair.first << ", " << pair.second << "\n";
   }
 
   float maxExtent = 0.5f * (bmax[0] - bmin[0]);
