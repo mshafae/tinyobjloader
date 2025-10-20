@@ -859,9 +859,11 @@ bool LoadObjAndConvert(
              draw_object.numTriangles);
     }
 
-    std::ostringstream file_name_stream;
-    file_name_stream << "buffer-view-" << buffer_name_count++ << ".txt";
-    WriteBufferTest(file_name_stream.str(), buffer);
+    if (false) {
+      std::ostringstream file_name_stream;
+      file_name_stream << "buffer-view-" << buffer_name_count++ << ".txt";
+      WriteBufferTest(file_name_stream.str(), buffer);
+    }
 
     drawObjects->push_back(draw_object);
   } // end for every shape
@@ -1010,7 +1012,7 @@ static void Draw(const std::vector<DrawObject>& drawObjects,
 
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // MS: Something is wrong with the materials
+    // MS: If there isn't a material, make one
     // if ((o.material_id < materials.size())) {
       assert(o.material_id < materials.size());
       std::string diffuse_texname = materials.at(o.material_id).diffuse_texname;

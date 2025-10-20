@@ -832,10 +832,11 @@ static bool LoadObjAndConvert(float bmin[3], float bmax[3],
                draw_object.numTriangles);
       }
 
-      std::ostringstream file_name_stream;
-      file_name_stream << "buffer-ogview-" << buffer_name_count++ << ".txt";
-      WriteBufferTest(file_name_stream.str(), buffer);
-
+      if (false) {
+        std::ostringstream file_name_stream;
+        file_name_stream << "buffer-ogview-" << buffer_name_count++ << ".txt";
+        WriteBufferTest(file_name_stream.str(), buffer);
+      }
       drawObjects->push_back(draw_object);
     }
   }
