@@ -211,7 +211,7 @@ void trackball_(glm::quat& q, const glm::vec2& p1, const glm::vec2& p2) {
    *  Now, we want the cross product of P1 and P2
    */
   // vcross(p2, p1, a);
-  const glm::vec3 axis{glm::cross(_p2, _p1)};
+  const glm::vec3 axis{glm::cross(_p1, _p2)};
   /*
    *  Figure out how much to rotate around that axis.
    */

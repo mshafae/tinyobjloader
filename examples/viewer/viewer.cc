@@ -24,7 +24,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <glm/gtx/quaternion.hpp>
+// #include <glm/gtx/quaternion.hpp>
 #include <glm/ext/matrix_relational.hpp>
 #include <glm/gtx/string_cast.hpp>
 
@@ -975,7 +975,7 @@ static void motionFunc(GLFWwindow* window, double mouse_x, double mouse_y) {
     trackball_(prev_quat_, p1, p2);
 
     add_quats(prev_quat, curr_quat, curr_quat);
-    curr_quat_ = prev_quat_ + curr_quat_;
+    curr_quat_ = glm::normalize(prev_quat_ * curr_quat_);
 
   } else if (mouseMiddlePressed) {
     // eye[0] -= transScale * (mouse_x - prevMouseX) / (float)width;
@@ -1194,7 +1194,8 @@ int main(int argc, char** argv) {
     build_rotmatrix(mat, curr_quat);
     // glMultMatrixf(&mat[0][0]);
     glm::mat4 rotation_matrix = glm::make_mat4(&mat[0][0]);
-    const auto rotation_matrix_ = glm::toMat4(curr_quat_);
+    // const auto rotation_matrix_ = glm::toMat4(curr_quat_);
+    const auto rotation_matrix_ = glm::mat4_cast(curr_quat_);
 
     std::cerr << "Main SGI Quat: " << curr_quat[0] << " " << curr_quat[1] << " " << curr_quat[2] << " " << curr_quat[3] << "\n";
     std::cerr << "Main GLM Quat: " << curr_quat_.x << " " << curr_quat_.y << " " << curr_quat_.z << " " << curr_quat_.w << "\n";
@@ -1220,7 +1221,7 @@ int main(int argc, char** argv) {
     // glTranslatef(-0.5 * (bmax[0] + bmin[0]), -0.5 * (bmax[1] + bmin[1]),
     //              -0.5 * (bmax[2] + bmin[2]));
 
-    modelview = lookat_matrix * rotation_matrix * scale_matrix * translate_matrix;
+    modelview = lookat_matrix * rotation_matrix_ * scale_matrix * translate_matrix;
     // glMultMatrixf(glm::value_ptr(modelview));
     glLoadMatrixf(glm::value_ptr(modelview));
 
