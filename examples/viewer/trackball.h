@@ -40,6 +40,15 @@
  * Written by Gavin Bell for Silicon Graphics, November 1988.
  */
 
+#define GLM_FORCE_SWIZZLE
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/string_cast.hpp>
+#include <iostream>
 /*
  * Pass the x and y coordinates of the last and current positions of
  * the mouse, scaled so they are from (-1.0 ... 1.0).
@@ -48,6 +57,7 @@
  * first paramater.
  */
 void trackball(float q[4], float p1x, float p1y, float p2x, float p2y);
+void trackball_(glm::quat& q, const glm::vec2& p1, const glm::vec2& p2);
 
 void negate_quat(float *q, float *qn);
 

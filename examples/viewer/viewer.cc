@@ -23,6 +23,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <glm/ext/matrix_relational.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
@@ -88,12 +92,15 @@ std::vector<DrawObject> gDrawObjects;
 int width = 768;
 int height = 768;
 
-double prevMouseX, prevMouseY;
+// double prevMouseX, prevMouseY;
+glm::dvec2 prev_mouse;
 bool mouseLeftPressed;
 bool mouseMiddlePressed;
 bool mouseRightPressed;
 float curr_quat[4];
 float prev_quat[4];
+glm::quat curr_quat_;
+glm::quat prev_quat_;
 glm::vec3 eye, lookat, up;
 // float eye[3], lookat[3], up[3];
 bool g_show_wire = true;
@@ -922,6 +929,8 @@ static void clickFunc(GLFWwindow* window, int button, int action, int mods) {
     if (action == GLFW_PRESS) {
       mouseLeftPressed = true;
       trackball(prev_quat, 0.0, 0.0, 0.0, 0.0);
+      trackball_(prev_quat_, glm::vec2{0, 0}, glm::vec2{0, 0});
+
     } else if (action == GLFW_RELEASE) {
       mouseLeftPressed = false;
     }
@@ -942,40 +951,56 @@ static void clickFunc(GLFWwindow* window, int button, int action, int mods) {
   }
 }
 
+
 static void motionFunc(GLFWwindow* window, double mouse_x, double mouse_y) {
   (void)window;
   float rotScale = 1.0f;
   float transScale = 2.0f;
 
+  const glm::dvec2 mouse{mouse_x, mouse_y};
+
   if (mouseLeftPressed) {
-    trackball(prev_quat, rotScale * (2.0f * prevMouseX - width) / (float)width,
-              rotScale * (height - 2.0f * prevMouseY) / (float)height,
-              rotScale * (2.0f * mouse_x - width) / (float)width,
-              rotScale * (height - 2.0f * mouse_y) / (float)height);
+    trackball(prev_quat, rotScale * (2.0f * prev_mouse.x - width) / (float)width,
+              rotScale * (height - 2.0f * prev_mouse.y) / (float)height,
+              rotScale * (2.0f * mouse.x - width) / (float)width,
+              rotScale * (height - 2.0f * mouse.y) / (float)height);
+    glm::vec2 p1{
+      rotScale * (2.0f * prev_mouse.x - width) / (float)width,
+      rotScale * (height - 2.0f * prev_mouse.y) / (float)height
+    };
+    glm::vec2 p2{
+      rotScale * (2.0f * mouse.x - width) / (float)width,
+      rotScale * (height - 2.0f * mouse.y) / (float)height
+    };
+    trackball_(prev_quat_, p1, p2);
 
     add_quats(prev_quat, curr_quat, curr_quat);
+    curr_quat_ = prev_quat_ + curr_quat_;
+
   } else if (mouseMiddlePressed) {
     // eye[0] -= transScale * (mouse_x - prevMouseX) / (float)width;
     // lookat[0] -= transScale * (mouse_x - prevMouseX) / (float)width;
     // eye[1] += transScale * (mouse_y - prevMouseY) / (float)height;
     // lookat[1] += transScale * (mouse_y - prevMouseY) / (float)height;
 
-    eye.x -= transScale * (mouse_x - prevMouseX) / (float)width;
-    lookat.x -= transScale * (mouse_x - prevMouseX) / (float)width;
+    eye.x -= transScale * (mouse.x - prev_mouse.x) / (float)width;
+    lookat.x -= transScale * (mouse.x - prev_mouse.x) / (float)width;
 
-    eye.y += transScale * (mouse_y - prevMouseY) / (float)height;
-    lookat.y += transScale * (mouse_y - prevMouseY) / (float)height;
+    eye.y += transScale * (mouse.y - prev_mouse.y) / (float)height;
+    lookat.y += transScale * (mouse.y - prev_mouse.y) / (float)height;
   } else if (mouseRightPressed) {
     // eye[2] += transScale * (mouse_y - prevMouseY) / (float)height;
     // lookat[2] += transScale * (mouse_y - prevMouseY) / (float)height;
 
-    eye.z += transScale * (mouse_y - prevMouseY) / (float)height;
-    lookat.z += transScale * (mouse_y - prevMouseY) / (float)height;
+    eye.z += transScale * (mouse.y - prev_mouse.y) / (float)height;
+    lookat.z += transScale * (mouse.y - prev_mouse.y) / (float)height;
   }
 
   // Update mouse point
-  prevMouseX = mouse_x;
-  prevMouseY = mouse_y;
+  // prevMouseX = mouse_x;
+  // prevMouseY = mouse_y;
+
+  prev_mouse = mouse;
 }
 
 static void Draw(const std::vector<DrawObject>& drawObjects,
@@ -1054,6 +1079,7 @@ static void Draw(const std::vector<DrawObject>& drawObjects,
 
 static void Init() {
   trackball(curr_quat, 0, 0, 0, 0);
+  trackball_(curr_quat_, glm::vec2{0, 0}, glm::vec2{0, 0});
 
   eye = glm::vec3{0.0f, 0.0f, 3.0f};
   // eye[0] = 0.0f;
@@ -1160,14 +1186,27 @@ int main(int argc, char** argv) {
     GLfloat mat[4][4];
     glm::mat4 modelview{1.0f};
 
-    auto lookat_matrix = glm::lookAt(eye, lookat, up);
+    const auto lookat_matrix = glm::lookAt(eye, lookat, up);
     // gluLookAt(eye[0], eye[1], eye[2], lookat[0], lookat[1], lookat[2], up[0],
               // up[1], up[2]);
     // glMultMatrixf(glm::value_ptr(lookat_matrix));
     
     build_rotmatrix(mat, curr_quat);
     // glMultMatrixf(&mat[0][0]);
-    glm::mat4 rotation_matrx = glm::make_mat4(&mat[0][0]);
+    glm::mat4 rotation_matrix = glm::make_mat4(&mat[0][0]);
+    const auto rotation_matrix_ = glm::toMat4(curr_quat_);
+
+    std::cerr << "Main SGI Quat: " << curr_quat[0] << " " << curr_quat[1] << " " << curr_quat[2] << " " << curr_quat[3] << "\n";
+    std::cerr << "Main GLM Quat: " << curr_quat_.x << " " << curr_quat_.y << " " << curr_quat_.z << " " << curr_quat_.w << "\n";
+
+    // if (glm::all(glm::equal(modelview, rotation_matrix, 0.000001f))) {
+    //   std::cerr << "They are the same\n";
+    // } else {
+    //   std::cerr << "They are different\n";
+    //   std::cerr << "SGI\n" << glm::to_string(rotation_matrix) << "\n\nGLM\n" <<
+    //   glm::to_string(rotation_matrix_) << "\n";
+    //   // exit(1);
+    // }
 
     // Fit to -1, 1
     // glScalef(1.0f / maxExtent, 1.0f / maxExtent, 1.0f / maxExtent);
@@ -1175,13 +1214,13 @@ int main(int argc, char** argv) {
     // glMultMatrixf(value_ptr(scale_matrix));
 
     // Centerize object.
-    glm::vec3 center_offset{box.CenterOffset()};
-    auto translate_matrix{glm::translate(center_offset)};
+    const glm::vec3 center_offset{box.CenterOffset()};
+    const auto translate_matrix{glm::translate(center_offset)};
     // glMultMatrixf(value_ptr(translate_matrix));
     // glTranslatef(-0.5 * (bmax[0] + bmin[0]), -0.5 * (bmax[1] + bmin[1]),
     //              -0.5 * (bmax[2] + bmin[2]));
 
-    modelview = lookat_matrix * rotation_matrx * scale_matrix * translate_matrix;
+    modelview = lookat_matrix * rotation_matrix * scale_matrix * translate_matrix;
     // glMultMatrixf(glm::value_ptr(modelview));
     glLoadMatrixf(glm::value_ptr(modelview));
 

@@ -59,7 +59,7 @@
  * simple example, though, so that is left as an Exercise for the
  * Programmer.
  */
-#define TRACKBALLSIZE (0.8)
+#define TRACKBALLSIZE (0.8f)
 
 /*
  * Local function prototypes (not defined in trackball.h)
@@ -174,7 +174,69 @@ void trackball(float q[4], float p1x, float p1y, float p2x, float p2y) {
     t = -1.0;
   phi = 2.0 * asin(t);
 
+  std::cerr << "SGI Trackball: angle: " << phi << " axis: " << a[0] << " " << a[1] << " " << a[2] << "\n";
   axis_to_quat(a, phi, q);
+  std::cerr << "SGI Quat: " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << "\n";
+}
+
+void trackball_(glm::quat& q, const glm::vec2& p1, const glm::vec2& p2) {
+  // glm::vec3 a; /* Axis of rotation */
+  float phi;  /* how much to rotate about axis */
+  // glm::vec3 _p1, _p2, d;
+  // float t;
+
+  if (p1 == p2) {
+    /* Zero rotation */
+    const glm::quat identity_quat{1.0f, 0.0f, 0.0f, 0.0f};
+    q = identity_quat;
+    return;
+  }
+
+  /*
+   * First, figure out z-coordinates for projection of P1 and P2 to
+   * deformed sphere
+   */
+  const glm::vec3 _p1{
+    p1,
+    tb_project_to_sphere(TRACKBALLSIZE, p1.x, p1.y)
+  };
+  const glm::vec3 _p2{
+    p2,
+    tb_project_to_sphere(TRACKBALLSIZE, p2.x, p2.y)
+  };
+  // vset(p1, p1x, p1y, tb_project_to_sphere(TRACKBALLSIZE, p1x, p1y));
+  // vset(p2, p2x, p2y, tb_project_to_sphere(TRACKBALLSIZE, p2x, p2y));
+
+  /*
+   *  Now, we want the cross product of P1 and P2
+   */
+  // vcross(p2, p1, a);
+  const glm::vec3 axis{glm::cross(_p2, _p1)};
+  /*
+   *  Figure out how much to rotate around that axis.
+   */
+  const glm::vec3 d{_p1 - _p2};
+  float t{glm::clamp((glm::length(d) / (2.0f * TRACKBALLSIZE)), -1.0f, 1.0f)};
+  // vsub(p1, p2, d);
+  // t = vlength(d) / (2.0 * TRACKBALLSIZE);
+
+  /*
+   * Avoid problems with out-of-control values...
+   */
+  // if (t > 1.0) {
+  //   t = 1.0;
+  // }
+  // if (t < -1.0) {
+  //   t = -1.0;
+  // }
+  
+  phi = 2.0f * glm::asin(t);
+
+  // axis_to_quat(a, phi, q);
+  std::cerr << "GLM Trackball: angle: " << phi << " axis: " << glm::to_string(axis) << "\n";
+
+  q = glm::angleAxis(phi, glm::normalize(axis));
+  std::cerr << "GLM Quat: " << glm::to_string(q) << "\n";
 }
 
 /*
