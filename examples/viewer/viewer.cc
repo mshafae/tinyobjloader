@@ -19,8 +19,10 @@
 #include <vector>
 
 #define GLM_FORCE_SWIZZLE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/transform.hpp>
 
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
@@ -366,8 +368,40 @@ static void computeSmoothingShapes(
 
 }  // namespace
 
-class AxisAlignedBoundingBox {
+class Extent {
 public:
+  void Update(glm::vec3 vec) {
+    min_extent = glm::min(min_extent, vec);
+    max_extent = glm::max(max_extent, vec);
+  }
+    
+  float MaxMidpoint() const {
+    float max_midpoint{0.5f * (max_extent.x - min_extent.x)};
+    float tmp_y{0.5f * (max_extent.y - min_extent.y)};
+    if (max_midpoint < tmp_y) {
+      max_midpoint = tmp_y;
+    }
+    float tmp_z{0.5f * (max_extent.z - min_extent.z)};
+    if (max_midpoint < tmp_z) {
+      max_midpoint = tmp_z;
+    }
+    return max_midpoint;
+  }
+
+  glm::vec3 CenterOffset() {
+    const glm::vec3 center{(max_extent + min_extent) * -0.5f};
+    return center;
+  }
+
+  std::string ToString() {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(3);
+    oss << "MinExtent: (" << min_extent.x << ", " << min_extent.y << ", "
+        << min_extent.z << ")\n";
+    oss << "MaxExtent: (" << max_extent.x << ", " << max_extent.y << ", "
+        << max_extent.z << ")\n";
+    return oss.str();
+  }
 
 private:
   glm::vec3 min_extent{std::numeric_limits<tinyobj::real_t>::max()};
@@ -519,7 +553,8 @@ bool HasNan(const glm::vec3& vec) {
   return has_nan;
 }
 
-bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
+// bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
+bool LoadObjAndConvert(Extent& box,
                        std::vector<DrawObject>* drawObjects,
                        std::vector<tinyobj::material_t>& _materials,
                        std::map<std::string, GLuint>& textures,
@@ -574,8 +609,8 @@ bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
   }
 
   // Bounding box init
-  bmin = glm::vec3{std::numeric_limits<tinyobj::real_t>::max()};
-  bmax = glm::vec3{std::numeric_limits<tinyobj::real_t>::min()};
+  // bmin = glm::vec3{std::numeric_limits<tinyobj::real_t>::max()};
+  // bmax = glm::vec3{std::numeric_limits<tinyobj::real_t>::min()};
 
   // Set to true to always regen normals
   bool regen_all_normals = attrib.normals.size() == 0;
@@ -654,13 +689,14 @@ bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
         // vertices[v] = glm::vec3{vx, vy, vz};
         vertices[v] = vertex;
 
-        bmin.x = glm::min(bmin.x, vertex.x);
-        bmin.y = glm::min(bmin.y, vertex.y);
-        bmin.z = glm::min(bmin.z, vertex.z);
+        box.Update(vertex);
+        // bmin.x = glm::min(bmin.x, vertex.x);
+        // bmin.y = glm::min(bmin.y, vertex.y);
+        // bmin.z = glm::min(bmin.z, vertex.z);
 
-        bmax.x = glm::max(bmax.x, vertex.x);
-        bmax.y = glm::max(bmax.y, vertex.y);
-        bmax.z = glm::max(bmax.z, vertex.z);
+        // bmax.x = glm::max(bmax.x, vertex.x);
+        // bmax.y = glm::max(bmax.y, vertex.y);
+        // bmax.z = glm::max(bmax.z, vertex.z);
 
         // Check if `normal_index` is zero or positive. negative = no normal
         // data
@@ -816,8 +852,9 @@ bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
 
   _materials = materials;
 
-  printf("bmin = %f, %f, %f\n", bmin.x, bmin.y, bmin.z);
-  printf("bmax = %f, %f, %f\n", bmax.x, bmax.y, bmax.z);
+  // printf("bmin = %f, %f, %f\n", bmin.x, bmin.y, bmin.z);
+  // printf("bmax = %f, %f, %f\n", bmax.x, bmax.y, bmax.z);
+  std::cout << box.ToString() << "\n";
   return true;
 }
 
@@ -1065,11 +1102,17 @@ int main(int argc, char** argv) {
 
   // float bmin[3] = {-71.892532, 0.000000, -47.928356};
   // float bmax[3] = {82.293999, 79.006561, 47.928356};
-  glm::vec3 bmin;
-  glm::vec3 bmax;
+  // glm::vec3 bmin;
+  // glm::vec3 bmax;
+  Extent box;
   std::vector<tinyobj::material_t> materials;
   std::map<std::string, GLuint> textures;
-  if (false == LoadObjAndConvert(bmin, bmax, &gDrawObjects, materials, textures,
+  // if (false == LoadObjAndConvert(bmin, bmax, &gDrawObjects, materials, textures,
+  //                                argv[1])) {
+  //   return -1;
+  // }
+
+  if (false == LoadObjAndConvert(box, &gDrawObjects, materials, textures,
                                  argv[1])) {
     return -1;
   }
@@ -1081,13 +1124,14 @@ int main(int argc, char** argv) {
 
   // MS: compute bounding box
 
-  float maxExtent = 0.5f * (bmax[0] - bmin[0]);
-  if (maxExtent < 0.5f * (bmax[1] - bmin[1])) {
-    maxExtent = 0.5f * (bmax[1] - bmin[1]);
-  }
-  if (maxExtent < 0.5f * (bmax[2] - bmin[2])) {
-    maxExtent = 0.5f * (bmax[2] - bmin[2]);
-  }
+  float maxExtent{box.MaxMidpoint()};
+  // float maxExtent = 0.5f * (bmax[0] - bmin[0]);
+  // if (maxExtent < 0.5f * (bmax[1] - bmin[1])) {
+  //   maxExtent = 0.5f * (bmax[1] - bmin[1]);
+  // }
+  // if (maxExtent < 0.5f * (bmax[2] - bmin[2])) {
+  //   maxExtent = 0.5f * (bmax[2] - bmin[2]);
+  // }
 
   while (glfwWindowShouldClose(window) == GL_FALSE) {
     glfwPollEvents();
@@ -1107,11 +1151,16 @@ int main(int argc, char** argv) {
     glMultMatrixf(&mat[0][0]);
 
     // Fit to -1, 1
-    glScalef(1.0f / maxExtent, 1.0f / maxExtent, 1.0f / maxExtent);
+    // glScalef(1.0f / maxExtent, 1.0f / maxExtent, 1.0f / maxExtent);
+    auto scale_matrix{glm::scale(glm::vec3{(1.0f / maxExtent)})};
+    glMultMatrixf(value_ptr(scale_matrix));
 
     // Centerize object.
-    glTranslatef(-0.5 * (bmax[0] + bmin[0]), -0.5 * (bmax[1] + bmin[1]),
-                 -0.5 * (bmax[2] + bmin[2]));
+    glm::vec3 center_offset{box.CenterOffset()};
+    auto translate_matrix{glm::translate(center_offset)};
+    glMultMatrixf(value_ptr(translate_matrix));
+    // glTranslatef(-0.5 * (bmax[0] + bmin[0]), -0.5 * (bmax[1] + bmin[1]),
+    //              -0.5 * (bmax[2] + bmin[2]));
 
     Draw(gDrawObjects, materials, textures);
 
