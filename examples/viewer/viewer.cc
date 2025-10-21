@@ -20,6 +20,7 @@
 
 #define GLM_FORCE_SWIZZLE
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
@@ -365,6 +366,14 @@ static void computeSmoothingShapes(
 
 }  // namespace
 
+class AxisAlignedBoundingBox {
+public:
+
+private:
+  glm::vec3 min_extent{std::numeric_limits<tinyobj::real_t>::max()};
+  glm::vec3 max_extent{std::numeric_limits<tinyobj::real_t>::min()};
+};
+
 void LoadDiffuseTexture(const tinyobj::material_t* mp,
                         const std::filesystem::path& base_dir,
                         std::map<std::string, GLuint>& textures) {
@@ -502,15 +511,19 @@ void WriteBufferTest(const std::string& filename,
   fh.close();
 }
 
+
+bool HasNan(const glm::vec3& vec) {
+  // Check if any component of vec is NAN
+  glm::bvec3 nan_components{glm::isnan(vec)};
+  bool has_nan{glm::any(nan_components)};
+  return has_nan;
+}
+
 bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
                        std::vector<DrawObject>* drawObjects,
                        std::vector<tinyobj::material_t>& _materials,
                        std::map<std::string, GLuint>& textures,
                        const char* inputfile) {
-  // timerutil tm;
-
-  // tm.start();
-
   const std::filesystem::path inputfile_path{inputfile};
   auto base_dir{inputfile_path.parent_path()};
 
@@ -518,15 +531,6 @@ bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
     base_dir = std::filesystem::path{"."} / base_dir;
   }
   std::cout << "Base directory: " << base_dir.string() << "\n";
-//   std::string base_dir = GetBaseDir(inputfile);
-//   if (base_dir.empty()) {
-//     base_dir = ".";
-//   }
-// #ifdef _WIN32
-//   base_dir += "\\";
-// #else
-//   base_dir += "/";
-// #endif
 
   // defaults to triangulate(true), triangulation_method("simple"),
   // vertex_color(true)
@@ -550,10 +554,6 @@ bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
   auto& shapes = reader.GetShapes();
   auto& materials = reader.GetMaterials();
 
-  // tm.end();
-
-  // printf("Parsing time: %d [ms]\n", (int)tm.msec());
-
   printf("# of vertices  = %d\n", (int)(attrib.vertices.size()) / 3);
   printf("# of normals   = %d\n", (int)(attrib.normals.size()) / 3);
   printf("# of texcoords = %d\n", (int)(attrib.texcoords.size()) / 2);
@@ -574,12 +574,10 @@ bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
   }
 
   // Bounding box init
-  // bmin[0] = bmin[1] = bmin[2] = std::numeric_limits<float>::max();
-  // bmax[0] = bmax[1] = bmax[2] = -std::numeric_limits<float>::max();
-
   bmin = glm::vec3{std::numeric_limits<tinyobj::real_t>::max()};
-  bmax = glm::vec3{-std::numeric_limits<tinyobj::real_t>::max()};
+  bmax = glm::vec3{std::numeric_limits<tinyobj::real_t>::min()};
 
+  // Set to true to always regen normals
   bool regen_all_normals = attrib.normals.size() == 0;
 
   tinyobj::attrib_t outattrib;
@@ -594,11 +592,14 @@ bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
     outattrib = attrib;
   }
 
-  printf("# of vertices  = %d\n", (int)(outattrib.vertices.size()) / 3);
-  printf("# of normals   = %d\n", (int)(outattrib.normals.size()) / 3);
-  printf("# of texcoords = %d\n", (int)(outattrib.texcoords.size()) / 2);
-  printf("# of materials = %d\n", (int)materials.size());
-  printf("# of shapes    = %d\n", (int)outshapes.size());
+  if (regen_all_normals) {
+    std::cerr << "After normal regeneration.\n";
+    printf("# of vertices  = %d\n", (int)(outattrib.vertices.size()) / 3);
+    printf("# of normals   = %d\n", (int)(outattrib.normals.size()) / 3);
+    printf("# of texcoords = %d\n", (int)(outattrib.texcoords.size()) / 2);
+    printf("# of materials = %d\n", (int)materials.size());
+    printf("# of shapes    = %d\n", (int)outshapes.size());
+  }
 
   int buffer_name_count{0};
   // Loop over shapes
@@ -631,48 +632,87 @@ bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
         // access to vertex
         tinyobj::index_t idx =
             outshapes.at(s).mesh.indices.at(index_offset + v);
-        tinyobj::real_t vx =
-            outattrib.vertices.at(3 * size_t(idx.vertex_index) + 0);
-        tinyobj::real_t vy =
-            outattrib.vertices.at(3 * size_t(idx.vertex_index) + 1);
-        tinyobj::real_t vz =
-            outattrib.vertices.at(3 * size_t(idx.vertex_index) + 2);
-        assert(vx != NAN && vy != NAN && vz != NAN);
-        vertices[v] = glm::vec3{vx, vy, vz};
-        bmin.x = glm::min(bmin.x, vx);
-        bmin.y = glm::min(bmin.y, vy);
-        bmin.z = glm::min(bmin.z, vz);
 
-        bmax.x = glm::max(bmax.x, vx);
-        bmax.y = glm::max(bmax.y, vy);
-        bmax.z = glm::max(bmax.z, vz);
+        // tinyobj::real_t vx =
+        //     outattrib.vertices.at(3 * size_t(idx.vertex_index) + 0);
+        // tinyobj::real_t vy =
+        //     outattrib.vertices.at(3 * size_t(idx.vertex_index) + 1);
+        // tinyobj::real_t vz =
+        //     outattrib.vertices.at(3 * size_t(idx.vertex_index) + 2);
+
+        const glm::vec3 vertex{
+          outattrib.vertices.at(3 * size_t(idx.vertex_index) + 0),
+          outattrib.vertices.at(3 * size_t(idx.vertex_index) + 1),
+          outattrib.vertices.at(3 * size_t(idx.vertex_index) + 2)
+        };
+
+        // Check if any component of vertex is NAN
+        bool has_nan{HasNan(vertex)};
+        assert(not has_nan);
+        // assert(vx != NAN && vy != NAN && vz != NAN);
+
+        // vertices[v] = glm::vec3{vx, vy, vz};
+        vertices[v] = vertex;
+
+        bmin.x = glm::min(bmin.x, vertex.x);
+        bmin.y = glm::min(bmin.y, vertex.y);
+        bmin.z = glm::min(bmin.z, vertex.z);
+
+        bmax.x = glm::max(bmax.x, vertex.x);
+        bmax.y = glm::max(bmax.y, vertex.y);
+        bmax.z = glm::max(bmax.z, vertex.z);
 
         // Check if `normal_index` is zero or positive. negative = no normal
         // data
         if (idx.normal_index >= 0) {
-          tinyobj::real_t nx =
-              outattrib.normals.at(3 * size_t(idx.normal_index) + 0);
-          tinyobj::real_t ny =
-              outattrib.normals.at(3 * size_t(idx.normal_index) + 1);
-          tinyobj::real_t nz =
-              outattrib.normals.at(3 * size_t(idx.normal_index) + 2);
-          assert(nx != NAN && ny != NAN && nz != NAN);
-          normals[v] = glm::vec3{nx, ny, nz};
+          // tinyobj::real_t nx =
+          //     outattrib.normals.at(3 * size_t(idx.normal_index) + 0);
+          // tinyobj::real_t ny =
+          //     outattrib.normals.at(3 * size_t(idx.normal_index) + 1);
+          // tinyobj::real_t nz =
+          //     outattrib.normals.at(3 * size_t(idx.normal_index) + 2);
+          const glm::vec3 normal{
+            outattrib.normals.at(3 * size_t(idx.normal_index) + 0),
+            outattrib.normals.at(3 * size_t(idx.normal_index) + 1),
+            outattrib.normals.at(3 * size_t(idx.normal_index) + 2)
+          };
+          // assert(nx != NAN && ny != NAN && nz != NAN);
+          // Check if any component of vertex is NAN
+          bool has_nan{HasNan(normal)};
+          assert(not has_nan);
+
+          // normals[v] = glm::vec3{nx, ny, nz};
+          normals[v] = normal;
         }
 
         // Check if `texcoord_index` is zero or positive. negative = no texcoord
         // data
         if (idx.texcoord_index >= 0) {
+          bool flip_y_coord{true};
+          if (flip_y_coord) {
+            const glm::vec2 tex_coord{
+              outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 0),
+              outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 1)
+            };
+            texcoords[v] = tex_coord;
+          } else {
+            const glm::vec2 tex_coord {
+              outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 0),
+              1.0f - outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 1)
+            };
+            texcoords[v] = tex_coord;
+          }
           // tinyobj::real_t tx =
           //     outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 0);
           // tinyobj::real_t ty =
           //     outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 1);
-          // Flip Y coordinate
-          tinyobj::real_t tx = outattrib.texcoords.at(2 * idx.texcoord_index);
-          tinyobj::real_t ty =
-              1.0f - outattrib.texcoords.at(2 * idx.texcoord_index + 1);
 
-          texcoords[v] = glm::vec2{tx, ty};
+          // Flip Y coordinate
+          // tinyobj::real_t tx = outattrib.texcoords.at(2 * idx.texcoord_index);
+          // tinyobj::real_t ty =
+          //     1.0f - outattrib.texcoords.at(2 * idx.texcoord_index + 1);
+
+          // texcoords[v] = glm::vec2{tx, ty};
         }
 
         // Optional: vertex colors
@@ -689,21 +729,21 @@ bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
 
       // per-face material
       // shapes[s].mesh.material_ids[f];
-      int current_material_id{outshapes.at(s).mesh.material_ids.at(f)};
+      const int current_material_id{outshapes.at(s).mesh.material_ids.at(f)};
       if ((current_material_id < 0) ||
           (current_material_id >= static_cast<int>(materials.size()))) {
         std::cerr << "Current shape " << s << " missing a material.\n";
         return false;
       }
 
-      glm::vec3 diffuse{
+      const glm::vec3 diffuse{
           materials.at(current_material_id).diffuse[0],
           materials.at(current_material_id).diffuse[1],
           materials.at(current_material_id).diffuse[2],
       };
 
-      float normal_factor = 0.2;
-      float diffuse_factor = 1 - normal_factor;
+      const float normal_factor = 0.2;
+      const float diffuse_factor = 1 - normal_factor;
       glm::vec3 colors[3];
 
       for (int k = 0; k < 3; k++) {
