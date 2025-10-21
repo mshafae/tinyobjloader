@@ -8,12 +8,13 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <iostream>
+#include <filesystem>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <map>
-#include <string>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -30,7 +31,7 @@
 
 #define TINYOBJLOADER_IMPLEMENTATION
 // TINYOBJLOADER_USE_MAPBOX_EARCUT: Enable better triangulation. Requires C++11
-// #define TINYOBJLOADER_USE_MAPBOX_EARCUT
+#define TINYOBJLOADER_USE_MAPBOX_EARCUT
 #include "../../tiny_obj_loader.h"
 #include "trackball.h"
 
@@ -73,71 +74,6 @@ extern "C" {
 #endif
 #endif
 
-class timerutil {
- public:
-#ifdef _WIN32
-  typedef DWORD time_t;
-
-  timerutil() { ::timeBeginPeriod(1); }
-  ~timerutil() { ::timeEndPeriod(1); }
-
-  void start() { t_[0] = ::timeGetTime(); }
-  void end() { t_[1] = ::timeGetTime(); }
-
-  time_t sec() { return (time_t)((t_[1] - t_[0]) / 1000); }
-  time_t msec() { return (time_t)((t_[1] - t_[0])); }
-  time_t usec() { return (time_t)((t_[1] - t_[0]) * 1000); }
-  time_t current() { return ::timeGetTime(); }
-
-#else
-#if defined(__unix__) || defined(__APPLE__)
-  typedef unsigned long int time_t;
-
-  void start() { gettimeofday(tv + 0, &tz); }
-  void end() { gettimeofday(tv + 1, &tz); }
-
-  time_t sec() { return (time_t)(tv[1].tv_sec - tv[0].tv_sec); }
-  time_t msec() {
-    return this->sec() * 1000 +
-           (time_t)((tv[1].tv_usec - tv[0].tv_usec) / 1000);
-  }
-  time_t usec() {
-    return this->sec() * 1000000 + (time_t)(tv[1].tv_usec - tv[0].tv_usec);
-  }
-  time_t current() {
-    struct timeval t;
-    gettimeofday(&t, NULL);
-    return (time_t)(t.tv_sec * 1000 + t.tv_usec);
-  }
-
-#else  // C timer
-  // using namespace std;
-  typedef clock_t time_t;
-
-  void start() { t_[0] = clock(); }
-  void end() { t_[1] = clock(); }
-
-  time_t sec() { return (time_t)((t_[1] - t_[0]) / CLOCKS_PER_SEC); }
-  time_t msec() { return (time_t)((t_[1] - t_[0]) * 1000 / CLOCKS_PER_SEC); }
-  time_t usec() { return (time_t)((t_[1] - t_[0]) * 1000000 / CLOCKS_PER_SEC); }
-  time_t current() { return (time_t)clock(); }
-
-#endif
-#endif
-
- private:
-#ifdef _WIN32
-  DWORD t_[2];
-#else
-#if defined(__unix__) || defined(__APPLE__)
-  struct timeval tv[2];
-  struct timezone tz;
-#else
-  time_t t_[2];
-#endif
-#endif
-};
-
 typedef struct {
   GLuint vb_id;  // vertex buffer id
   int numTriangles;
@@ -161,25 +97,6 @@ bool g_cull_face = false;
 
 GLFWwindow* window;
 
-static std::string GetBaseDir(const std::string& filepath) {
-  if (filepath.find_last_of("/\\") != std::string::npos)
-    return filepath.substr(0, filepath.find_last_of("/\\"));
-  return "";
-}
-
-static bool FileExists(const std::string& abs_filename) {
-  bool ret;
-  FILE* fp = fopen(abs_filename.c_str(), "rb");
-  if (fp) {
-    ret = true;
-    fclose(fp);
-  } else {
-    ret = false;
-  }
-
-  return ret;
-}
-
 static void CheckErrors(std::string desc) {
   GLenum e = glGetError();
   if (e != GL_NO_ERROR) {
@@ -188,52 +105,18 @@ static void CheckErrors(std::string desc) {
   }
 }
 
-static void CalcNormal(float N[3], float v0[3], float v1[3], float v2[3]) {
-  float v10[3];
-  v10[0] = v1[0] - v0[0];
-  v10[1] = v1[1] - v0[1];
-  v10[2] = v1[2] - v0[2];
+void CalcNormal(glm::vec3& normal, const glm::vec3& v0, const glm::vec3& v1,
+                const glm::vec3& v2) {
+  const glm::vec3 v10{v1 - v0};
+  const glm::vec3 v20{v2 - v0};
 
-  float v20[3];
-  v20[0] = v2[0] - v0[0];
-  v20[1] = v2[1] - v0[1];
-  v20[2] = v2[2] - v0[2];
-
-  N[0] = v10[1] * v20[2] - v10[2] * v20[1];
-  N[1] = v10[2] * v20[0] - v10[0] * v20[2];
-  N[2] = v10[0] * v20[1] - v10[1] * v20[0];
-
-  float len2 = N[0] * N[0] + N[1] * N[1] + N[2] * N[2];
-  if (len2 > 0.0f) {
-    float len = sqrtf(len2);
-
-    N[0] /= len;
-    N[1] /= len;
-    N[2] /= len;
-  }
+  const glm::vec3 n{glm::cross(v10, v20)};
+  normal = glm::normalize(n);
 }
+
 
 namespace  // Local utility functions
 {
-struct vec3 {
-  float v[3];
-  vec3() {
-    v[0] = 0.0f;
-    v[1] = 0.0f;
-    v[2] = 0.0f;
-  }
-};
-
-void normalizeVector(vec3& v) {
-  float len2 = v.v[0] * v.v[0] + v.v[1] * v.v[1] + v.v[2] * v.v[2];
-  if (len2 > 0.0f) {
-    float len = sqrtf(len2);
-
-    v.v[0] /= len;
-    v.v[1] /= len;
-    v.v[2] /= len;
-  }
-}
 
 /*
   There are 2 approaches here to automatically generating vertex normals. The
@@ -272,9 +155,11 @@ bool hasSmoothingGroup(const tinyobj::shape_t& shape) {
 
 void computeSmoothingNormals(const tinyobj::attrib_t& attrib,
                              const tinyobj::shape_t& shape,
-                             std::map<int, vec3>& smoothVertexNormals) {
+                             std::map<int, glm::vec3>& smoothVertexNormals) {
   smoothVertexNormals.clear();
-  std::map<int, vec3>::iterator iter;
+  std::map<int, glm::vec3>::iterator iter;
+
+std::cerr << "computeSmoothingNormals\n";
 
   for (size_t f = 0; f < shape.mesh.indices.size() / 3; f++) {
     // Get the three indexes of the face (all faces are triangular)
@@ -284,23 +169,38 @@ void computeSmoothingNormals(const tinyobj::attrib_t& attrib,
 
     // Get the three vertex indexes and coordinates
     int vi[3];      // indexes
-    float v[3][3];  // coordinates
+    // float v[3][3];  // coordinates
+    glm::vec3 v[3];  // coordinates
 
-    for (int k = 0; k < 3; k++) {
+    // for (int k = 0; k < 3; k++) {
+    //   vi[0] = idx0.vertex_index;
+    //   vi[1] = idx1.vertex_index;
+    //   vi[2] = idx2.vertex_index;
+    //   assert(vi[0] >= 0);
+    //   assert(vi[1] >= 0);
+    //   assert(vi[2] >= 0);
+
+    //   v[0][k] = attrib.vertices[3 * vi[0] + k];
+    //   v[1][k] = attrib.vertices[3 * vi[1] + k];
+    //   v[2][k] = attrib.vertices[3 * vi[2] + k];
+    // }
+
       vi[0] = idx0.vertex_index;
       vi[1] = idx1.vertex_index;
       vi[2] = idx2.vertex_index;
       assert(vi[0] >= 0);
       assert(vi[1] >= 0);
       assert(vi[2] >= 0);
-
-      v[0][k] = attrib.vertices[3 * vi[0] + k];
-      v[1][k] = attrib.vertices[3 * vi[1] + k];
-      v[2][k] = attrib.vertices[3 * vi[2] + k];
-    }
+      for (int k = 0; k < 3; k++) {
+        v[k] = glm::vec3{
+          attrib.vertices[3 * vi[k] + 0],
+          attrib.vertices[3 * vi[k] + 1],
+          attrib.vertices[3 * vi[k] + 2]
+        };
+      }
 
     // Compute the normal of the face
-    float normal[3];
+    glm::vec3 normal;
     CalcNormal(normal, v[0], v[1], v[2]);
 
     // Add the normal to the three vertexes
@@ -308,29 +208,28 @@ void computeSmoothingNormals(const tinyobj::attrib_t& attrib,
       iter = smoothVertexNormals.find(vi[i]);
       if (iter != smoothVertexNormals.end()) {
         // add
-        iter->second.v[0] += normal[0];
-        iter->second.v[1] += normal[1];
-        iter->second.v[2] += normal[2];
+        iter->second += normal;
       } else {
-        smoothVertexNormals[vi[i]].v[0] = normal[0];
-        smoothVertexNormals[vi[i]].v[1] = normal[1];
-        smoothVertexNormals[vi[i]].v[2] = normal[2];
+        smoothVertexNormals[vi[i]] = normal;
       }
     }
 
-  }  // f
+  }  // for faces
 
   // Normalize the normals, that is, make them unit vectors
-  for (iter = smoothVertexNormals.begin(); iter != smoothVertexNormals.end();
-       iter++) {
-    normalizeVector(iter->second);
+  // for (iter = smoothVertexNormals.begin(); iter != smoothVertexNormals.end();
+  //      iter++) {
+  //   normalizeVector(iter->second);
+  // }
+  for (auto& pair : smoothVertexNormals) {
+    pair.second = glm::normalize(pair.second);
   }
 
 }  // computeSmoothingNormals
 
 static void computeAllSmoothingNormals(tinyobj::attrib_t& attrib,
                                        std::vector<tinyobj::shape_t>& shapes) {
-  vec3 p[3];
+  glm::vec3 p[3];
   for (size_t s = 0, slen = shapes.size(); s < slen; ++s) {
     const tinyobj::shape_t& shape(shapes[s]);
     size_t facecount = shape.mesh.num_face_vertices.size();
@@ -340,35 +239,35 @@ static void computeAllSmoothingNormals(tinyobj::attrib_t& attrib,
       for (unsigned int v = 0; v < 3; ++v) {
         tinyobj::index_t idx = shape.mesh.indices[3 * f + v];
         assert(idx.vertex_index != -1);
-        p[v].v[0] = attrib.vertices[3 * idx.vertex_index];
-        p[v].v[1] = attrib.vertices[3 * idx.vertex_index + 1];
-        p[v].v[2] = attrib.vertices[3 * idx.vertex_index + 2];
+        p[v] = glm::vec3{
+          attrib.vertices[3 * idx.vertex_index + 0],
+          attrib.vertices[3 * idx.vertex_index + 1],
+          attrib.vertices[3 * idx.vertex_index + 2]
+        };
       }
 
       // cross(p[1] - p[0], p[2] - p[0])
-      float nx = (p[1].v[1] - p[0].v[1]) * (p[2].v[2] - p[0].v[2]) -
-                 (p[1].v[2] - p[0].v[2]) * (p[2].v[1] - p[0].v[1]);
-      float ny = (p[1].v[2] - p[0].v[2]) * (p[2].v[0] - p[0].v[0]) -
-                 (p[1].v[0] - p[0].v[0]) * (p[2].v[2] - p[0].v[2]);
-      float nz = (p[1].v[0] - p[0].v[0]) * (p[2].v[1] - p[0].v[1]) -
-                 (p[1].v[1] - p[0].v[1]) * (p[2].v[0] - p[0].v[0]);
+
+      glm::vec3 p10 = p[1] - p[0];
+      glm::vec3 p20 = p[2] - p[0];
+      glm::vec3 n = glm::cross(p10, p20);
 
       // Don't normalize here.
       for (unsigned int v = 0; v < 3; ++v) {
         tinyobj::index_t idx = shape.mesh.indices[3 * f + v];
-        attrib.normals[3 * idx.normal_index] += nx;
-        attrib.normals[3 * idx.normal_index + 1] += ny;
-        attrib.normals[3 * idx.normal_index + 2] += nz;
+        attrib.normals[3 * idx.normal_index] += n.x;
+        attrib.normals[3 * idx.normal_index + 1] += n.y;
+        attrib.normals[3 * idx.normal_index + 2] += n.z;
       }
     }
   }
 
   assert(attrib.normals.size() % 3 == 0);
   for (size_t i = 0, nlen = attrib.normals.size() / 3; i < nlen; ++i) {
-    tinyobj::real_t& nx = attrib.normals[3 * i];
+    tinyobj::real_t& nx = attrib.normals[3 * i + 0];
     tinyobj::real_t& ny = attrib.normals[3 * i + 1];
     tinyobj::real_t& nz = attrib.normals[3 * i + 2];
-    tinyobj::real_t len = sqrtf(nx * nx + ny * ny + nz * nz);
+    tinyobj::real_t len = std::sqrtf(nx * nx + ny * ny + nz * nz);
     tinyobj::real_t scale = len == 0 ? 0 : 1 / len;
     nx *= scale;
     ny *= scale;
@@ -436,10 +335,10 @@ static void computeSmoothingShape(
   }
 }
 
-static void computeSmoothingShapes(const tinyobj::attrib_t& inattrib,
-                                   const std::vector<tinyobj::shape_t>& inshapes,
-                                   std::vector<tinyobj::shape_t>& outshapes,
-                                   tinyobj::attrib_t& outattrib) {
+static void computeSmoothingShapes(
+    const tinyobj::attrib_t& inattrib,
+    const std::vector<tinyobj::shape_t>& inshapes,
+    std::vector<tinyobj::shape_t>& outshapes, tinyobj::attrib_t& outattrib) {
   for (size_t s = 0, slen = inshapes.size(); s < slen; ++s) {
     const tinyobj::shape_t& inshape = inshapes[s];
 
@@ -467,7 +366,7 @@ static void computeSmoothingShapes(const tinyobj::attrib_t& inattrib,
 }  // namespace
 
 void LoadDiffuseTexture(const tinyobj::material_t* mp,
-                        const std::string& base_dir,
+                        const std::filesystem::path& base_dir,
                         std::map<std::string, GLuint>& textures) {
   if (mp->diffuse_texname.length() > 0) {
     // Only load the texture if it is not already loaded
@@ -476,27 +375,25 @@ void LoadDiffuseTexture(const tinyobj::material_t* mp,
       int w, h;
       int comp;
 
-      std::string texture_filename = mp->diffuse_texname;
-      std::cerr << "Working on texture filename: " << texture_filename << "\n";
-      if (!FileExists(texture_filename)) {
-        // Append base dir.
-        texture_filename = base_dir + mp->diffuse_texname;
-        if (!FileExists(texture_filename)) {
-          std::cerr << "Unable to find file: " << mp->diffuse_texname
-                    << std::endl;
+      const std::string texture_filename{mp->diffuse_texname};
+      const std::filesystem::path texture_path{base_dir / texture_filename};
+      std::cerr << "Working on texture filename: " << texture_path.string() << "\n";
+
+      if (!std::filesystem::exists(texture_path)) {
+          std::cerr << "Unable to find file: " << texture_path.string()
+                    << "\n";
           exit(1);
-        }
       }
 
       unsigned char* image =
-          stbi_load(texture_filename.c_str(), &w, &h, &comp, STBI_default);
+          stbi_load(texture_path.c_str(), &w, &h, &comp, STBI_default);
       if (!image) {
-        std::cerr << "Unable to load texture: " << texture_filename
-                  << std::endl;
+        std::cerr << "Unable to load texture: " << texture_path.string()
+                  << "\n";
         exit(1);
       }
       std::cout << "Loaded texture: " << texture_filename << ", w = " << w
-                << ", h = " << h << ", comp = " << comp << std::endl;
+                << ", h = " << h << ", comp = " << comp << "\n";
 
       glGenTextures(1, &texture_id);
       glBindTexture(GL_TEXTURE_2D, texture_id);
@@ -590,7 +487,8 @@ void PrintOBJMaterial(std::ostream& out, const tinyobj::material_t& mp) {
   out << "reflection_texname: " << mp.reflection_texname << "\n";
 }
 
-void WriteBufferTest(const std::string& filename, const std::vector<tinyobj::real_t>& buffer) {
+void WriteBufferTest(const std::string& filename,
+                     const std::vector<tinyobj::real_t>& buffer) {
   std::ofstream fh{filename};
   if (!fh) {
     std::cerr << "Failed to open " << filename << "\n";
@@ -604,25 +502,31 @@ void WriteBufferTest(const std::string& filename, const std::vector<tinyobj::rea
   fh.close();
 }
 
-bool LoadObjAndConvert(
-  glm::vec3& bmin, glm::vec3& bmax,
-  std::vector<DrawObject>* drawObjects,
+bool LoadObjAndConvert(glm::vec3& bmin, glm::vec3& bmax,
+                       std::vector<DrawObject>* drawObjects,
                        std::vector<tinyobj::material_t>& _materials,
                        std::map<std::string, GLuint>& textures,
                        const char* inputfile) {
-  timerutil tm;
+  // timerutil tm;
 
-  tm.start();
+  // tm.start();
 
-  std::string base_dir = GetBaseDir(inputfile);
-  if (base_dir.empty()) {
-    base_dir = ".";
+  const std::filesystem::path inputfile_path{inputfile};
+  auto base_dir{inputfile_path.parent_path()};
+
+  if (! base_dir.has_root_path()) {
+    base_dir = std::filesystem::path{"."} / base_dir;
   }
-#ifdef _WIN32
-  base_dir += "\\";
-#else
-  base_dir += "/";
-#endif
+  std::cout << "Base directory: " << base_dir.string() << "\n";
+//   std::string base_dir = GetBaseDir(inputfile);
+//   if (base_dir.empty()) {
+//     base_dir = ".";
+//   }
+// #ifdef _WIN32
+//   base_dir += "\\";
+// #else
+//   base_dir += "/";
+// #endif
 
   // defaults to triangulate(true), triangulation_method("simple"),
   // vertex_color(true)
@@ -646,9 +550,9 @@ bool LoadObjAndConvert(
   auto& shapes = reader.GetShapes();
   auto& materials = reader.GetMaterials();
 
-  tm.end();
+  // tm.end();
 
-  printf("Parsing time: %d [ms]\n", (int)tm.msec());
+  // printf("Parsing time: %d [ms]\n", (int)tm.msec());
 
   printf("# of vertices  = %d\n", (int)(attrib.vertices.size()) / 3);
   printf("# of normals   = %d\n", (int)(attrib.normals.size()) / 3);
@@ -704,12 +608,11 @@ bool LoadObjAndConvert(
     std::vector<tinyobj::real_t> buffer;
 
     // Check for smoothing group and compute smoothing normals
-    std::map<int, vec3> smoothVertexNormals;
+    std::map<int, glm::vec3> smoothVertexNormals;
     if (!regen_all_normals && (hasSmoothingGroup(outshapes[s]) > 0)) {
       std::cout << "Compute smoothingNormal for shape [" << s << "]\n";
       computeSmoothingNormals(outattrib, outshapes[s], smoothVertexNormals);
     }
-
 
     // Loop over faces(polygon) 3 at a time
     size_t index_offset = 0;
@@ -726,10 +629,14 @@ bool LoadObjAndConvert(
 
       for (size_t v = 0; v < fv; v++) {
         // access to vertex
-        tinyobj::index_t idx = outshapes.at(s).mesh.indices.at(index_offset + v);
-        tinyobj::real_t vx = outattrib.vertices.at(3 * size_t(idx.vertex_index) + 0);
-        tinyobj::real_t vy = outattrib.vertices.at(3 * size_t(idx.vertex_index) + 1);
-        tinyobj::real_t vz = outattrib.vertices.at(3 * size_t(idx.vertex_index) + 2);
+        tinyobj::index_t idx =
+            outshapes.at(s).mesh.indices.at(index_offset + v);
+        tinyobj::real_t vx =
+            outattrib.vertices.at(3 * size_t(idx.vertex_index) + 0);
+        tinyobj::real_t vy =
+            outattrib.vertices.at(3 * size_t(idx.vertex_index) + 1);
+        tinyobj::real_t vz =
+            outattrib.vertices.at(3 * size_t(idx.vertex_index) + 2);
         assert(vx != NAN && vy != NAN && vz != NAN);
         vertices[v] = glm::vec3{vx, vy, vz};
         bmin.x = glm::min(bmin.x, vx);
@@ -740,16 +647,17 @@ bool LoadObjAndConvert(
         bmax.y = glm::max(bmax.y, vy);
         bmax.z = glm::max(bmax.z, vz);
 
-
         // Check if `normal_index` is zero or positive. negative = no normal
         // data
         if (idx.normal_index >= 0) {
-          tinyobj::real_t nx = outattrib.normals.at(3 * size_t(idx.normal_index) + 0);
-          tinyobj::real_t ny = outattrib.normals.at(3 * size_t(idx.normal_index) + 1);
-          tinyobj::real_t nz = outattrib.normals.at(3 * size_t(idx.normal_index) + 2);
+          tinyobj::real_t nx =
+              outattrib.normals.at(3 * size_t(idx.normal_index) + 0);
+          tinyobj::real_t ny =
+              outattrib.normals.at(3 * size_t(idx.normal_index) + 1);
+          tinyobj::real_t nz =
+              outattrib.normals.at(3 * size_t(idx.normal_index) + 2);
           assert(nx != NAN && ny != NAN && nz != NAN);
           normals[v] = glm::vec3{nx, ny, nz};
-
         }
 
         // Check if `texcoord_index` is zero or positive. negative = no texcoord
@@ -761,17 +669,19 @@ bool LoadObjAndConvert(
           //     outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 1);
           // Flip Y coordinate
           tinyobj::real_t tx = outattrib.texcoords.at(2 * idx.texcoord_index);
-          tinyobj::real_t ty = 1.0f - outattrib.texcoords.at(2 * idx.texcoord_index + 1);
+          tinyobj::real_t ty =
+              1.0f - outattrib.texcoords.at(2 * idx.texcoord_index + 1);
 
           texcoords[v] = glm::vec2{tx, ty};
         }
-        
-        // Optional: vertex colors
-        // tinyobj::real_t red   = outattrib.colors[3*size_t(idx.vertex_index)+0];
-        // tinyobj::real_t green = outattrib.colors[3*size_t(idx.vertex_index)+1];
-        // tinyobj::real_t blue  = outattrib.colors[3*size_t(idx.vertex_index)+2];
 
-      } // end loop over vertices in the face
+        // Optional: vertex colors
+        // tinyobj::real_t red   =
+        // outattrib.colors[3*size_t(idx.vertex_index)+0]; tinyobj::real_t green
+        // = outattrib.colors[3*size_t(idx.vertex_index)+1]; tinyobj::real_t
+        // blue  = outattrib.colors[3*size_t(idx.vertex_index)+2];
+
+      }  // end loop over vertices in the face
       // index_offset counts up by 3 but fv could be something other than 3
       // there is an assert to make sure it increases by 3, triangulation
       // is on by default
@@ -787,9 +697,9 @@ bool LoadObjAndConvert(
       }
 
       glm::vec3 diffuse{
-        materials.at(current_material_id).diffuse[0],
-        materials.at(current_material_id).diffuse[1],
-        materials.at(current_material_id).diffuse[2],
+          materials.at(current_material_id).diffuse[0],
+          materials.at(current_material_id).diffuse[1],
+          materials.at(current_material_id).diffuse[2],
       };
 
       float normal_factor = 0.2;
@@ -798,26 +708,23 @@ bool LoadObjAndConvert(
 
       for (int k = 0; k < 3; k++) {
         const glm::vec3 color{
-                    normals[k].x * normal_factor + diffuse.r * diffuse_factor,
-                    normals[k].y * normal_factor + diffuse.g * diffuse_factor,
-                    normals[k].z * normal_factor + diffuse.b * diffuse_factor };
+            normals[k].x * normal_factor + diffuse.r * diffuse_factor,
+            normals[k].y * normal_factor + diffuse.g * diffuse_factor,
+            normals[k].z * normal_factor + diffuse.b * diffuse_factor};
         const glm::vec3 normalized_color = glm::normalize(color);
         const glm::vec3 v_color{
-          normalized_color.r * 0.5 + 0.5,
-          normalized_color.g * 0.5 + 0.5,
-          normalized_color.b * 0.5 + 0.5,
+            normalized_color.r * 0.5 + 0.5,
+            normalized_color.g * 0.5 + 0.5,
+            normalized_color.b * 0.5 + 0.5,
         };
         colors[k] = v_color;
       }
-
-
 
       // glm::vec3 colors[3] = {
       //   glm::vec3{1.0, 0.0, 0.0},
       //   glm::vec3{1.0, 0.0, 0.0},
       //   glm::vec3{1.0, 0.0, 0.0},
       // };
-
 
       for (int k = 0; k < 3; k++) {
         buffer.push_back(vertices[k].x);
@@ -834,10 +741,9 @@ bool LoadObjAndConvert(
 
         buffer.push_back(texcoords[k].x);
         buffer.push_back(texcoords[k].y);
-
       }
 
-    } // end Loop over faces(polygon) 3 at a time
+    }  // end Loop over faces(polygon) 3 at a time
 
     draw_object.vb_id = 0;
     draw_object.numTriangles = 0;
@@ -845,7 +751,7 @@ bool LoadObjAndConvert(
     // Does not support per-face material
     draw_object.material_id = outshapes[s].mesh.material_ids[0];
     // printf("shape[%d] material_id %d\n", int(s),
-           // int(draw_object.material_id));
+    // int(draw_object.material_id));
 
     if (buffer.size() > 0) {
       glGenBuffers(1, &draw_object.vb_id);
@@ -866,7 +772,7 @@ bool LoadObjAndConvert(
     }
 
     drawObjects->push_back(draw_object);
-  } // end for every shape
+  }  // end for every shape
 
   _materials = materials;
 
@@ -1014,11 +920,11 @@ static void Draw(const std::vector<DrawObject>& drawObjects,
 
     // MS: If there isn't a material, make one
     // if ((o.material_id < materials.size())) {
-      assert(o.material_id < materials.size());
-      std::string diffuse_texname = materials.at(o.material_id).diffuse_texname;
-      if (textures.find(diffuse_texname) != textures.end()) {
-        glBindTexture(GL_TEXTURE_2D, textures.at(diffuse_texname));
-      }
+    assert(o.material_id < materials.size());
+    std::string diffuse_texname = materials.at(o.material_id).diffuse_texname;
+    if (textures.find(diffuse_texname) != textures.end()) {
+      glBindTexture(GL_TEXTURE_2D, textures.at(diffuse_texname));
+    }
     // }
     glVertexPointer(3, GL_FLOAT, stride, (const void*)0);
     glNormalPointer(GL_FLOAT, stride, (const void*)(sizeof(float) * 3));
@@ -1123,7 +1029,7 @@ int main(int argc, char** argv) {
   glm::vec3 bmax;
   std::vector<tinyobj::material_t> materials;
   std::map<std::string, GLuint> textures;
-  if (false == LoadObjAndConvert( bmin, bmax, &gDrawObjects, materials, textures,
+  if (false == LoadObjAndConvert(bmin, bmax, &gDrawObjects, materials, textures,
                                  argv[1])) {
     return -1;
   }
