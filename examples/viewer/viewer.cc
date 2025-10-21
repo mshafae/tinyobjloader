@@ -94,7 +94,8 @@ bool mouseMiddlePressed;
 bool mouseRightPressed;
 float curr_quat[4];
 float prev_quat[4];
-float eye[3], lookat[3], up[3];
+glm::vec3 eye, lookat, up;
+// float eye[3], lookat[3], up[3];
 bool g_show_wire = true;
 bool g_cull_face = false;
 
@@ -954,13 +955,22 @@ static void motionFunc(GLFWwindow* window, double mouse_x, double mouse_y) {
 
     add_quats(prev_quat, curr_quat, curr_quat);
   } else if (mouseMiddlePressed) {
-    eye[0] -= transScale * (mouse_x - prevMouseX) / (float)width;
-    lookat[0] -= transScale * (mouse_x - prevMouseX) / (float)width;
-    eye[1] += transScale * (mouse_y - prevMouseY) / (float)height;
-    lookat[1] += transScale * (mouse_y - prevMouseY) / (float)height;
+    // eye[0] -= transScale * (mouse_x - prevMouseX) / (float)width;
+    // lookat[0] -= transScale * (mouse_x - prevMouseX) / (float)width;
+    // eye[1] += transScale * (mouse_y - prevMouseY) / (float)height;
+    // lookat[1] += transScale * (mouse_y - prevMouseY) / (float)height;
+
+    eye.x -= transScale * (mouse_x - prevMouseX) / (float)width;
+    lookat.x -= transScale * (mouse_x - prevMouseX) / (float)width;
+
+    eye.y += transScale * (mouse_y - prevMouseY) / (float)height;
+    lookat.y += transScale * (mouse_y - prevMouseY) / (float)height;
   } else if (mouseRightPressed) {
-    eye[2] += transScale * (mouse_y - prevMouseY) / (float)height;
-    lookat[2] += transScale * (mouse_y - prevMouseY) / (float)height;
+    // eye[2] += transScale * (mouse_y - prevMouseY) / (float)height;
+    // lookat[2] += transScale * (mouse_y - prevMouseY) / (float)height;
+
+    eye.z += transScale * (mouse_y - prevMouseY) / (float)height;
+    lookat.z += transScale * (mouse_y - prevMouseY) / (float)height;
   }
 
   // Update mouse point
@@ -1045,17 +1055,20 @@ static void Draw(const std::vector<DrawObject>& drawObjects,
 static void Init() {
   trackball(curr_quat, 0, 0, 0, 0);
 
-  eye[0] = 0.0f;
-  eye[1] = 0.0f;
-  eye[2] = 3.0f;
+  eye = glm::vec3{0.0f, 0.0f, 3.0f};
+  // eye[0] = 0.0f;
+  // eye[1] = 0.0f;
+  // eye[2] = 3.0f;
 
-  lookat[0] = 0.0f;
-  lookat[1] = 0.0f;
-  lookat[2] = 0.0f;
+  lookat = glm::vec3{0.0f, 0.0f, 0.0f};
+  // lookat[0] = 0.0f;
+  // lookat[1] = 0.0f;
+  // lookat[2] = 0.0f;
 
-  up[0] = 0.0f;
-  up[1] = 1.0f;
-  up[2] = 0.0f;
+  up = glm::vec3{0.0f, 1.0f, 0.0f};
+  // up[0] = 0.0f;
+  // up[1] = 1.0f;
+  // up[2] = 0.0f;
 }
 
 int main(int argc, char** argv) {
@@ -1145,8 +1158,10 @@ int main(int argc, char** argv) {
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     GLfloat mat[4][4];
-    gluLookAt(eye[0], eye[1], eye[2], lookat[0], lookat[1], lookat[2], up[0],
-              up[1], up[2]);
+    auto lookat_matrix = glm::lookAt(eye, lookat, up);
+    // gluLookAt(eye[0], eye[1], eye[2], lookat[0], lookat[1], lookat[2], up[0],
+              // up[1], up[2]);
+    glMultMatrixf(glm::value_ptr(lookat_matrix));
     build_rotmatrix(mat, curr_quat);
     glMultMatrixf(&mat[0][0]);
 
