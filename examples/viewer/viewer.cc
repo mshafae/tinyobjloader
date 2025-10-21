@@ -727,15 +727,15 @@ bool LoadObjAndConvert(Extent& box,
         if (idx.texcoord_index >= 0) {
           bool flip_y_coord{true};
           if (flip_y_coord) {
-            const glm::vec2 tex_coord{
-              outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 0),
-              outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 1)
-            };
-            texcoords[v] = tex_coord;
-          } else {
             const glm::vec2 tex_coord {
               outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 0),
               1.0f - outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 1)
+            };
+            texcoords[v] = tex_coord;
+          } else {
+            const glm::vec2 tex_coord{
+              outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 0),
+              outattrib.texcoords.at(2 * size_t(idx.texcoord_index) + 1)
             };
             texcoords[v] = tex_coord;
           }
@@ -1158,24 +1158,32 @@ int main(int argc, char** argv) {
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     GLfloat mat[4][4];
+    glm::mat4 modelview{1.0f};
+
     auto lookat_matrix = glm::lookAt(eye, lookat, up);
     // gluLookAt(eye[0], eye[1], eye[2], lookat[0], lookat[1], lookat[2], up[0],
               // up[1], up[2]);
-    glMultMatrixf(glm::value_ptr(lookat_matrix));
+    // glMultMatrixf(glm::value_ptr(lookat_matrix));
+    
     build_rotmatrix(mat, curr_quat);
-    glMultMatrixf(&mat[0][0]);
+    // glMultMatrixf(&mat[0][0]);
+    glm::mat4 rotation_matrx = glm::make_mat4(&mat[0][0]);
 
     // Fit to -1, 1
     // glScalef(1.0f / maxExtent, 1.0f / maxExtent, 1.0f / maxExtent);
     auto scale_matrix{glm::scale(glm::vec3{(1.0f / maxExtent)})};
-    glMultMatrixf(value_ptr(scale_matrix));
+    // glMultMatrixf(value_ptr(scale_matrix));
 
     // Centerize object.
     glm::vec3 center_offset{box.CenterOffset()};
     auto translate_matrix{glm::translate(center_offset)};
-    glMultMatrixf(value_ptr(translate_matrix));
+    // glMultMatrixf(value_ptr(translate_matrix));
     // glTranslatef(-0.5 * (bmax[0] + bmin[0]), -0.5 * (bmax[1] + bmin[1]),
     //              -0.5 * (bmax[2] + bmin[2]));
+
+    modelview = lookat_matrix * rotation_matrx * scale_matrix * translate_matrix;
+    // glMultMatrixf(glm::value_ptr(modelview));
+    glLoadMatrixf(glm::value_ptr(modelview));
 
     Draw(gDrawObjects, materials, textures);
 
