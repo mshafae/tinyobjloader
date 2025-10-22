@@ -4,7 +4,7 @@
 CXXFILES = viewer.cc og-viewer.cc trackball.cc
 HEADERS = stb_image.h trackball.h
 CXX = clang++
-CXXFLAGS += -x c++ -g -O3 -Wall -pedantic -pipe -std=c++20 -Wno-register -Wno-deprecated-declarations -Wno-unused-but-set-variable -I /opt/local/include -I ./glm
+CXXFLAGS += -x c++ -g -O3 -Wall -pedantic -pipe -std=c++20 -Wno-register -Wno-deprecated-declarations -Wno-unused-but-set-variable -I /opt/local/include -I ./glm -I ./spdlog
 LDFLAGS += -g -O3 -Wall -pedantic -pipe -std=c++20 -L /opt/local/lib -lglfw -lGLEW -framework OpenGL
 
 OBJECTS = $(CXXFILES:.cc=.o)
