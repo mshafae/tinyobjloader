@@ -1183,7 +1183,7 @@ int main(int argc, char** argv) {
     // camera & rotate
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    GLfloat mat[4][4];
+    // GLfloat mat[4][4];
     glm::mat4 modelview{1.0f};
 
     const auto lookat_matrix = glm::lookAt(eye, lookat, up);
@@ -1191,14 +1191,16 @@ int main(int argc, char** argv) {
               // up[1], up[2]);
     // glMultMatrixf(glm::value_ptr(lookat_matrix));
     
-    build_rotmatrix(mat, curr_quat);
+    // build_rotmatrix(mat, curr_quat);
     // glMultMatrixf(&mat[0][0]);
-    glm::mat4 rotation_matrix = glm::make_mat4(&mat[0][0]);
+    // glm::mat4 rotation_matrix = glm::make_mat4(&mat[0][0]);
+
+    // requires glm/gtx/quaternion.hpp
     // const auto rotation_matrix_ = glm::toMat4(curr_quat_);
     const auto rotation_matrix_ = glm::mat4_cast(curr_quat_);
 
-    std::cerr << "Main SGI Quat: " << curr_quat[0] << " " << curr_quat[1] << " " << curr_quat[2] << " " << curr_quat[3] << "\n";
-    std::cerr << "Main GLM Quat: " << curr_quat_.x << " " << curr_quat_.y << " " << curr_quat_.z << " " << curr_quat_.w << "\n";
+    // std::cerr << "Main SGI Quat: " << curr_quat[0] << " " << curr_quat[1] << " " << curr_quat[2] << " " << curr_quat[3] << "\n";
+    // std::cerr << "Main GLM Quat: " << curr_quat_.x << " " << curr_quat_.y << " " << curr_quat_.z << " " << curr_quat_.w << "\n";
 
     // if (glm::all(glm::equal(modelview, rotation_matrix, 0.000001f))) {
     //   std::cerr << "They are the same\n";

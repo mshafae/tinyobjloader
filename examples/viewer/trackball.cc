@@ -174,9 +174,9 @@ void trackball(float q[4], float p1x, float p1y, float p2x, float p2y) {
     t = -1.0;
   phi = 2.0 * asin(t);
 
-  std::cerr << "SGI Trackball: angle: " << phi << " axis: " << a[0] << " " << a[1] << " " << a[2] << "\n";
-  axis_to_quat(a, phi, q);
-  std::cerr << "SGI Quat: " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << "\n";
+  // std::cerr << "SGI Trackball: angle: " << phi << " axis: " << a[0] << " " << a[1] << " " << a[2] << "\n";
+  // axis_to_quat(a, phi, q);
+  // std::cerr << "SGI Quat: " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << "\n";
 }
 
 void trackball_(glm::quat& q, const glm::vec2& p1, const glm::vec2& p2) {
@@ -233,10 +233,10 @@ void trackball_(glm::quat& q, const glm::vec2& p1, const glm::vec2& p2) {
   phi = 2.0f * glm::asin(t);
 
   // axis_to_quat(a, phi, q);
-  std::cerr << "GLM Trackball: angle: " << phi << " axis: " << glm::to_string(axis) << "\n";
+  // std::cerr << "GLM Trackball: angle: " << phi << " axis: " << glm::to_string(axis) << "\n";
 
   q = glm::angleAxis(phi, glm::normalize(axis));
-  std::cerr << "GLM Quat: " << glm::to_string(q) << "\n";
+  // std::cerr << "GLM Quat: " << glm::to_string(q) << "\n";
 }
 
 /*
