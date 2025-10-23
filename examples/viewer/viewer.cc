@@ -1,9 +1,10 @@
 //
 // Simple .obj viewer(vertex only)
 //
-#include <GL/glew.h>
+// #include <GL/glew.h>
+#include <glad/gl.h>
 
-#include <algorithm>
+// #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -11,7 +12,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
-#include <limits>
+// #include <limits>
 #include <map>
 #include <sstream>
 #include <string>
@@ -27,6 +28,7 @@
 // #include <glm/gtx/quaternion.hpp>
 #include <glm/ext/matrix_relational.hpp>
 #include <glm/gtx/string_cast.hpp>
+#include <spdlog/spdlog.h>
 
 #ifdef __APPLE__
 #include <OpenGL/glu.h>
@@ -170,7 +172,7 @@ void computeSmoothingNormals(const tinyobj::attrib_t& attrib,
   smoothVertexNormals.clear();
   std::map<int, glm::vec3>::iterator iter;
 
-std::cerr << "computeSmoothingNormals\n";
+  SPDLOG_INFO("computeSmoothingNormals");
 
   for (size_t f = 0; f < shape.mesh.indices.size() / 3; f++) {
     // Get the three indexes of the face (all faces are triangular)
@@ -404,10 +406,10 @@ public:
   std::string ToString() {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(3);
-    oss << "MinExtent: (" << min_extent.x << ", " << min_extent.y << ", "
+    oss << "\nMinExtent: (" << min_extent.x << ", " << min_extent.y << ", "
         << min_extent.z << ")\n";
     oss << "MaxExtent: (" << max_extent.x << ", " << max_extent.y << ", "
-        << max_extent.z << ")\n";
+        << max_extent.z << ")";
     return oss.str();
   }
 
@@ -428,23 +430,20 @@ void LoadDiffuseTexture(const tinyobj::material_t* mp,
 
       const std::string texture_filename{mp->diffuse_texname};
       const std::filesystem::path texture_path{base_dir / texture_filename};
-      std::cerr << "Working on texture filename: " << texture_path.string() << "\n";
+      SPDLOG_INFO("Working on texture filename: {}", texture_path.string());
 
       if (!std::filesystem::exists(texture_path)) {
-          std::cerr << "Unable to find file: " << texture_path.string()
-                    << "\n";
+          SPDLOG_ERROR("Unable to find file: {}", texture_path.string());
           exit(1);
       }
 
       unsigned char* image =
           stbi_load(texture_path.c_str(), &w, &h, &comp, STBI_default);
       if (!image) {
-        std::cerr << "Unable to load texture: " << texture_path.string()
-                  << "\n";
+        SPDLOG_ERROR("Unable to load texture: {}", texture_path.string());
         exit(1);
       }
-      std::cout << "Loaded texture: " << texture_filename << ", w = " << w
-                << ", h = " << h << ", comp = " << comp << "\n";
+      SPDLOG_INFO("Loaded texture: {}, w = {}, h = {}, comp = {}", texture_filename, w, h, comp);
 
       glGenTextures(1, &texture_id);
       glBindTexture(GL_TEXTURE_2D, texture_id);
@@ -542,7 +541,7 @@ void WriteBufferTest(const std::string& filename,
                      const std::vector<tinyobj::real_t>& buffer) {
   std::ofstream fh{filename};
   if (!fh) {
-    std::cerr << "Failed to open " << filename << "\n";
+    SPDLOG_ERROR("Failed to open {}", filename);
     exit(1);
   }
   fh << std::fixed << std::setprecision(3);
@@ -573,7 +572,7 @@ bool LoadObjAndConvert(Extent& box,
   if (! base_dir.has_root_path()) {
     base_dir = std::filesystem::path{"."} / base_dir;
   }
-  std::cout << "Base directory: " << base_dir.string() << "\n";
+  SPDLOG_INFO("Base directory: {}", base_dir.string());
 
   // defaults to triangulate(true), triangulation_method("simple"),
   // vertex_color(true)
@@ -584,24 +583,24 @@ bool LoadObjAndConvert(Extent& box,
 
   if (!reader.ParseFromFile(inputfile, reader_config)) {
     if (!reader.Error().empty()) {
-      std::cerr << "TinyObjReader: " << reader.Error();
+      SPDLOG_ERROR("TinyObjReader: {}", reader.Error());
     }
     return false;
   }
   assert(reader.Valid());
   if (!reader.Warning().empty()) {
-    std::cout << "TinyObjReader: " << reader.Warning();
+    SPDLOG_WARN("TinyObjReader: {}", reader.Warning());
   }
 
   auto& attrib = reader.GetAttrib();
   auto& shapes = reader.GetShapes();
   auto& materials = reader.GetMaterials();
 
-  printf("# of vertices  = %d\n", (int)(attrib.vertices.size()) / 3);
-  printf("# of normals   = %d\n", (int)(attrib.normals.size()) / 3);
-  printf("# of texcoords = %d\n", (int)(attrib.texcoords.size()) / 2);
-  printf("# of materials = %d\n", (int)materials.size());
-  printf("# of shapes    = %d\n", (int)shapes.size());
+  SPDLOG_INFO("# of vertices  = {}", (int)(attrib.vertices.size()) / 3);
+  SPDLOG_INFO("# of normals   = {}", (int)(attrib.normals.size()) / 3);
+  SPDLOG_INFO("# of texcoords = {}", (int)(attrib.texcoords.size()) / 2);
+  SPDLOG_INFO("# of materials = {}", (int)materials.size());
+  SPDLOG_INFO("# of shapes    = {}", (int)shapes.size());
 
   // Load diffuse textures
   {
@@ -627,7 +626,7 @@ bool LoadObjAndConvert(Extent& box,
   std::vector<tinyobj::shape_t> outshapes;
 
   if (regen_all_normals) {
-    std::cout << "Regenerate all normals!\n";
+    SPDLOG_INFO("Regenerate all normals!");
     computeSmoothingShapes(attrib, shapes, outshapes, outattrib);
     computeAllSmoothingNormals(outattrib, outshapes);
   } else {
@@ -636,12 +635,12 @@ bool LoadObjAndConvert(Extent& box,
   }
 
   if (regen_all_normals) {
-    std::cerr << "After normal regeneration.\n";
-    printf("# of vertices  = %d\n", (int)(outattrib.vertices.size()) / 3);
-    printf("# of normals   = %d\n", (int)(outattrib.normals.size()) / 3);
-    printf("# of texcoords = %d\n", (int)(outattrib.texcoords.size()) / 2);
-    printf("# of materials = %d\n", (int)materials.size());
-    printf("# of shapes    = %d\n", (int)outshapes.size());
+    SPDLOG_INFO("After normal regeneration.");
+    SPDLOG_INFO("# of vertices  = {}", (int)(outattrib.vertices.size()) / 3);
+    SPDLOG_INFO("# of normals   = {}", (int)(outattrib.normals.size()) / 3);
+    SPDLOG_INFO("# of texcoords = {}", (int)(outattrib.texcoords.size()) / 2);
+    SPDLOG_INFO("# of materials = {}", (int)materials.size());
+    SPDLOG_INFO("# of shapes    = {}", (int)outshapes.size());
   }
 
   int buffer_name_count{0};
@@ -654,7 +653,7 @@ bool LoadObjAndConvert(Extent& box,
     // Check for smoothing group and compute smoothing normals
     std::map<int, glm::vec3> smoothVertexNormals;
     if (!regen_all_normals && (hasSmoothingGroup(outshapes[s]) > 0)) {
-      std::cout << "Compute smoothingNormal for shape [" << s << "]\n";
+      SPDLOG_INFO("Compute smoothingNormal for shape [{}]", s);
       computeSmoothingNormals(outattrib, outshapes[s], smoothVertexNormals);
     }
 
@@ -776,7 +775,7 @@ bool LoadObjAndConvert(Extent& box,
       const int current_material_id{outshapes.at(s).mesh.material_ids.at(f)};
       if ((current_material_id < 0) ||
           (current_material_id >= static_cast<int>(materials.size()))) {
-        std::cerr << "Current shape " << s << " missing a material.\n";
+        SPDLOG_ERROR("Current shape {} missing a material.", s);
         return false;
       }
 
@@ -845,7 +844,7 @@ bool LoadObjAndConvert(Extent& box,
       draw_object.numTriangles = buffer.size() / (3 + 3 + 3 + 2) /
                                  3;  // 3:vtx, 3:normal, 3:col, 2:texcoord
 
-      printf("shape[%d] # of triangles = %d\n", static_cast<int>(s),
+      SPDLOG_INFO("shape[{}] # of triangles = {}", static_cast<int>(s),
              draw_object.numTriangles);
     }
 
@@ -862,7 +861,7 @@ bool LoadObjAndConvert(Extent& box,
 
   // printf("bmin = %f, %f, %f\n", bmin.x, bmin.y, bmin.z);
   // printf("bmax = %f, %f, %f\n", bmax.x, bmax.y, bmax.z);
-  std::cout << box.ToString() << "\n";
+  SPDLOG_INFO("{}", box.ToString());
   return true;
 }
 
@@ -1097,30 +1096,73 @@ static void Init() {
   // up[2] = 0.0f;
 }
 
+void GLVersion(bool do_dump_extensions, std::ostream& out) {
+  const char* gl_vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+  const char* gl_renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+  const char* gl_version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+  const char* gl_shading_language_version = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
+  spdlog::info("Vendor: {}", gl_vendor);
+  spdlog::info("Renderer: {}", gl_renderer);
+  spdlog::info("OpenGL Version: {}", gl_version);
+  spdlog::info("GLSL Version: {}", gl_shading_language_version);
+
+  GLint major{0};
+  GLint minor{0};
+  GLint samples{0};
+  GLint sample_buffers{0};
+  // glGetIntegerv(GL_MAJOR_VERSION, &major);
+  // glGetIntegerv(GL_MINOR_VERSION, &minor);
+  glGetIntegerv(GL_SAMPLES, &samples);
+  glGetIntegerv(GL_SAMPLE_BUFFERS, &sample_buffers);
+
+  spdlog::info("-----------------------------------------------");
+  // spdlog::info("GL Version   : {}.{}", major, minor);
+  spdlog::info("MSAA samples : {}", samples);
+  spdlog::info("MSAA buffers : {}", sample_buffers);
+  spdlog::info("-----------------------------------------------");
+
+  if (do_dump_extensions) {
+    // GLint num_extensions{0};
+    // glGetIntegerv(GL_NUM_EXTENSIONS, &num_extensions);
+    // for (int i = 0; i < num_extensions; i++) {
+    //   out << glGetStringi(GL_EXTENSIONS, i) << "\n";
+    //   // fprintf(stderr, "%s\n", glGetStringi(GL_EXTENSIONS, i));
+    // }
+  }
+}
+
 int main(int argc, char** argv) {
+
+  spdlog::set_level(spdlog::level::debug);
+
   if (argc < 2) {
-    std::cout << "Needs input.obj\n" << std::endl;
+    SPDLOG_ERROR("Needs input.obj");
     return 0;
   }
 
   Init();
 
+
   if (!glfwInit()) {
-    std::cerr << "Failed to initialize GLFW." << std::endl;
+    SPDLOG_ERROR("Failed to initialize GLFW.");
     return -1;
   }
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+  glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
 
   window = glfwCreateWindow(width, height, "Obj viewer", NULL, NULL);
   if (window == NULL) {
-    std::cerr << "Failed to open GLFW window. " << std::endl;
+    SPDLOG_ERROR("Failed to open GLFW window. ");
     glfwTerminate();
     return 1;
   }
 
-  std::cout << "W : Toggle wireframe\n";
-  std::cout << "C : Toggle face culling\n";
+
+  SPDLOG_INFO("W : Toggle wireframe");
+  SPDLOG_INFO("C : Toggle face culling");
   // std::cout << "K, J, H, L, P, N : Move camera\n";
-  std::cout << "Q, Esc : quit\n";
+  SPDLOG_INFO("Q, Esc : quit");
 
   glfwMakeContextCurrent(window);
   glfwSwapInterval(1);
@@ -1131,11 +1173,20 @@ int main(int argc, char** argv) {
   glfwSetMouseButtonCallback(window, clickFunc);
   glfwSetCursorPosCallback(window, motionFunc);
 
-  glewExperimental = true;
-  if (glewInit() != GLEW_OK) {
-    std::cerr << "Failed to initialize GLEW." << std::endl;
+  // glewExperimental = true;
+  // if (glewInit() != GLEW_OK) {
+  //   SPDLOG_ERROR("Failed to initialize GLEW.");
+  //   return -1;
+  // }
+
+  int version_ = gladLoadGL(glfwGetProcAddress);
+  if (version_ == 0) {
+    SPDLOG_ERROR("Could not load OpenGL functions.");
     return -1;
   }
+
+
+  GLVersion(false, std::cerr);
 
   reshapeFunc(window, width, height);
 
@@ -1156,9 +1207,9 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  std::cout << "Textures:\n";
+  SPDLOG_INFO("Textures:");
   for (const auto& pair : textures) {
-    std::cout << pair.first << ", " << pair.second << "\n";
+    SPDLOG_INFO("{}, {}", pair.first, pair.second);
   }
 
   // MS: compute bounding box
