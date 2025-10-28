@@ -836,6 +836,12 @@ bool LoadObjAndConvert(Extent& box,
     // printf("shape[%d] material_id %d\n", int(s),
     // int(draw_object.material_id));
 
+      std::ofstream ofh("viewer-buffer_dump.txt");
+      for (const auto val : buffer) {
+        ofh << val << "\n";
+      }
+      ofh.close();
+
     if (buffer.size() > 0) {
       glGenBuffers(1, &draw_object.vb_id);
       glBindBuffer(GL_ARRAY_BUFFER, draw_object.vb_id);
